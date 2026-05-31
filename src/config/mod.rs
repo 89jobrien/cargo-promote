@@ -1,3 +1,4 @@
+use crate::domain::version::BumpLevel;
 use crate::domain::{Pipeline, Registry, Stage};
 use anyhow::{Context, Result};
 use serde::Deserialize;
@@ -12,6 +13,8 @@ struct ConfigFile {
     registries: HashMap<String, RegistryDef>,
     #[serde(default)]
     pipelines: HashMap<String, PipelineDef>,
+    #[serde(default)]
+    autobump: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -32,6 +35,7 @@ struct PipelineDef {
 pub struct Config {
     pub registries: HashMap<String, Registry>,
     pub pipelines: HashMap<String, Pipeline>,
+    pub autobump: Option<BumpLevel>,
 }
 
 impl Config {
@@ -84,9 +88,17 @@ impl Config {
             pipelines.insert(name.clone(), Pipeline { name, stages });
         }
 
+        let autobump = file
+            .autobump
+            .as_deref()
+            .map(|s| s.parse::<BumpLevel>())
+            .transpose()
+            .context("invalid autobump value")?;
+
         Ok(Self {
             registries,
             pipelines,
+            autobump,
         })
     }
 
@@ -131,6 +143,7 @@ impl Config {
         Self {
             registries,
             pipelines,
+            autobump: None,
         }
     }
 
@@ -212,5 +225,27 @@ stages = ["nonexistent"]
         let cfg = Config::from_toml("").expect("empty config should parse");
         assert!(cfg.pipelines.is_empty());
         assert!(cfg.registries.is_empty());
+        assert!(cfg.autobump.is_none());
+    }
+
+    #[test]
+    fn autobump_parses_from_config() {
+        let toml = r#"autobump = "patch""#;
+        let cfg = Config::from_toml(toml).expect("should parse");
+        assert_eq!(cfg.autobump, Some(BumpLevel::Patch));
+    }
+
+    #[test]
+    fn autobump_minor() {
+        let toml = r#"autobump = "minor""#;
+        let cfg = Config::from_toml(toml).expect("should parse");
+        assert_eq!(cfg.autobump, Some(BumpLevel::Minor));
+    }
+
+    #[test]
+    fn autobump_invalid_errors() {
+        let toml = r#"autobump = "bogus""#;
+        let result = Config::from_toml(toml);
+        assert!(result.is_err());
     }
 }

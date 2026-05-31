@@ -8,10 +8,24 @@ use cargo_promote::domain::depgraph;
 use cargo_promote::domain::manifest::{self, ManifestDescription};
 use cargo_promote::domain::pipeline::PipelineEngine;
 use cargo_promote::domain::traits::RegistryQuery;
+use cargo_promote::domain::version;
 use cargo_promote::domain::{CrateRef, Pipeline, PublishOpts, Stage};
 
 fn print_crate_line(name: &str, version: &str) {
     println!("  {name} v{version}");
+}
+
+/// If autobump is configured, bump the manifest version and return an updated CrateRef.
+fn maybe_autobump(krate: CrateRef, cfg: &Config) -> Result<CrateRef> {
+    let Some(level) = cfg.autobump else {
+        return Ok(krate);
+    };
+    let (old, new) = version::bump_manifest_version(&krate.manifest_path, level)?;
+    eprintln!("=> autobump: {} v{old} -> v{new}", krate.name);
+    Ok(CrateRef {
+        version: new.to_string(),
+        ..krate
+    })
 }
 use cargo_promote::infra::cargo::CargoPublisher;
 use cargo_promote::infra::git::gitea::GiteaRegistry;
@@ -128,7 +142,6 @@ impl App<'_> {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let cwd = std::env::current_dir().context("cannot determine current directory")?;
-    let cfg = Config::load(&cwd)?;
 
     let publisher = CargoPublisher;
     let engine = PipelineEngine::new(publisher, |prompt| {
@@ -138,11 +151,6 @@ fn main() -> Result<()> {
         input.trim().eq_ignore_ascii_case("y")
     });
 
-    let app = App {
-        engine: &engine,
-        cfg: &cfg,
-    };
-
     match cli.cmd {
         Cmd::Publish {
             path,
@@ -151,7 +159,13 @@ fn main() -> Result<()> {
             pipeline,
             registry,
         } => {
+            let cfg = Config::load(path.as_deref().unwrap_or(&cwd))?;
+            let app = App {
+                engine: &engine,
+                cfg: &cfg,
+            };
             let krate = manifest::resolve_crate(path.as_deref(), package.as_deref())?;
+            let krate = maybe_autobump(krate, &cfg)?;
             let opts = PublishOpts {
                 allow_dirty,
                 ..Default::default()
@@ -182,6 +196,11 @@ fn main() -> Result<()> {
             pipeline,
             from,
         } => {
+            let cfg = Config::load(path.as_deref().unwrap_or(&cwd))?;
+            let app = App {
+                engine: &engine,
+                cfg: &cfg,
+            };
             let krate = manifest::resolve_crate(path.as_deref(), package.as_deref())?;
             let opts = PublishOpts {
                 skip_confirm: yes,
@@ -203,7 +222,13 @@ fn main() -> Result<()> {
             yes,
             pipeline,
         } => {
+            let cfg = Config::load(path.as_deref().unwrap_or(&cwd))?;
+            let app = App {
+                engine: &engine,
+                cfg: &cfg,
+            };
             let krate = manifest::resolve_crate(path.as_deref(), package.as_deref())?;
+            let krate = maybe_autobump(krate, &cfg)?;
             let opts = PublishOpts {
                 allow_dirty,
                 skip_confirm: yes,
@@ -215,10 +240,10 @@ fn main() -> Result<()> {
         }
 
         Cmd::List { registry } => {
+            let cfg = Config::load(&cwd)?;
             let query = GiteaRegistry;
             let reg_name = registry.as_deref().unwrap_or("cratebox");
-            let reg = app
-                .cfg
+            let reg = cfg
                 .registry(reg_name)
                 .ok_or_else(|| anyhow::anyhow!("unknown registry '{reg_name}'"))?;
             let crates = query.list_crates(reg)?;
@@ -240,6 +265,7 @@ fn main() -> Result<()> {
             registry,
             skip,
         } => {
+            let cfg = Config::load(&cwd)?;
             let root = path.unwrap_or_else(|| {
                 PathBuf::from(std::env::var("HOME").unwrap_or_default()).join("dev")
             });
@@ -288,8 +314,7 @@ fn main() -> Result<()> {
             eprintln!();
 
             let reg_name = registry.as_deref().unwrap_or("cratebox");
-            let reg = app
-                .cfg
+            let reg = cfg
                 .registry(reg_name)
                 .ok_or_else(|| anyhow::anyhow!("unknown registry '{reg_name}'"))?;
             let stage = Stage {
@@ -313,7 +338,7 @@ fn main() -> Result<()> {
                     version: node.version.clone(),
                     manifest_path: node.manifest_path.clone(),
                 };
-                match app.engine.run_stage(&krate, &stage, &opts) {
+                match engine.run_stage(&krate, &stage, &opts) {
                     Ok(()) => ok += 1,
                     Err(e) => {
                         eprintln!("  FAIL: {} — {}", name, e);

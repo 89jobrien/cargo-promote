@@ -2,6 +2,7 @@ pub mod depgraph;
 pub mod manifest;
 pub mod pipeline;
 pub mod traits;
+pub mod version;
 
 use std::path::PathBuf;
 
