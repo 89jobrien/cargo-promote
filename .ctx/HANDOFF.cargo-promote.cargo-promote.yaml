@@ -25,25 +25,14 @@ items:
     files:
       - CLAUDE.md
 
-  - id: CP-003
-    title: "Implement branch promotion pipeline"
-    description: >
-      Design approved. Add bump, branch, and revised publish commands.
-      Stages are git branches (default: develop -> staging -> production).
-      CI chain: each stage calls cargo-promote branch --from <stage> on green.
-      promote.lock written at pipeline entry with SHA-256 of publishable
-      sources, verified at each hop. See
-      docs/plans/2026-05-31-branch-promotion-pipeline.md.
-    priority: P1
-    status: open
-    files:
-      - src/domain/pipeline/mod.rs
-      - src/domain/traits/mod.rs
-      - src/config/mod.rs
-      - src/main.rs
-      - docs/plans/2026-05-31-branch-promotion-pipeline.md
-
 log:
+  - session: 5
+    date: "20260531::185800"
+    summary: "Implemented branch promotion pipeline: PromoteLock, BranchMerger/RemotePusher/Tagger ports, GitCli adapters, BranchPipeline orchestrator, bump/branch commands. All 53 tests passing."
+    commits:
+      - sha: dc758bf
+        branch: main
+
   - session: 4
     date: "20260531::185414"
     summary: "Designed branch promotion pipeline, approved design doc, updated default stages to develop/staging/production"
