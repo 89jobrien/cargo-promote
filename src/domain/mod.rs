@@ -8,7 +8,7 @@ use std::path::PathBuf;
 /// A named cargo registry target.
 #[derive(Debug, Clone)]
 pub struct Registry {
-    /// Display name (e.g. "minibox", "crates-io")
+    /// Display name (e.g. "cratebox", "crates-io")
     pub name: String,
     /// Name as known to `cargo publish --registry <cargo_name>`.
     /// `None` means the default registry (crates.io).

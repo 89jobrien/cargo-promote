@@ -1,6 +1,6 @@
 # cargo-promote
 
-Publish crates to the minibox registry (Gitea packages on jobrien-vm)
+Publish crates to the cratebox registry (Gitea packages on jobrien-vm)
 and optionally promote them to crates.io.
 
 ## Architecture
@@ -14,11 +14,11 @@ and optionally promote them to crates.io.
 ## Commands
 
 ```bash
-cargo-promote publish              # publish cwd crate to minibox
+cargo-promote publish              # publish cwd crate to cratebox
 cargo-promote publish -p foo       # publish workspace member
-cargo-promote promote -p foo       # promote from minibox to crates.io
+cargo-promote promote -p foo       # promote from cratebox to crates.io
 cargo-promote ship -p foo          # publish + promote in one step
-cargo-promote list                 # list all crates on minibox
+cargo-promote list                 # list all crates on cratebox
 cargo-promote status               # show local crate versions
 ```
 

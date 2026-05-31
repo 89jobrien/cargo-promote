@@ -36,7 +36,7 @@ pub struct Config {
 
 impl Config {
     /// Load from `promote.toml` in the given directory, or fall back to
-    /// hardcoded defaults matching the original minibox -> crates.io behavior.
+    /// hardcoded defaults matching the original cratebox -> crates.io behavior.
     // qual:allow(iosp) reason: "I/O boundary — reads file then delegates to from_toml"
     pub fn load(dir: &Path) -> Result<Self> {
         let config_path = dir.join(CONFIG_FILENAME);
@@ -90,15 +90,15 @@ impl Config {
         })
     }
 
-    /// Hardcoded default: minibox -> crates.io (backwards compatible).
+    /// Hardcoded default: cratebox -> crates.io (backwards compatible).
     pub fn default_config() -> Self {
         let base_url = std::env::var("REGISTRY_URL")
             .unwrap_or_else(|_| "http://100.105.75.7:3000".to_string());
         let user = std::env::var("REGISTRY_USER").unwrap_or_else(|_| "joe".to_string());
 
-        let minibox = Registry {
-            name: "minibox".to_string(),
-            cargo_name: Some("minibox".to_string()),
+        let cratebox = Registry {
+            name: "cratebox".to_string(),
+            cargo_name: Some("cratebox".to_string()),
             api_url: Some(format!("{base_url}/api/packages/{user}/cargo")),
             confirm: false,
         };
@@ -111,7 +111,7 @@ impl Config {
         };
 
         let registries = HashMap::from([
-            ("minibox".to_string(), minibox.clone()),
+            ("cratebox".to_string(), cratebox.clone()),
             ("crates-io".to_string(), crates_io.clone()),
         ]);
 
@@ -120,7 +120,7 @@ impl Config {
             Pipeline {
                 name: "default".to_string(),
                 stages: vec![
-                    Stage { registry: minibox },
+                    Stage { registry: cratebox },
                     Stage {
                         registry: crates_io,
                     },
@@ -155,7 +155,7 @@ mod tests {
         let cfg = Config::default_config();
         let p = cfg.pipeline(None).expect("default pipeline should exist");
         assert_eq!(p.stages.len(), 2);
-        assert_eq!(p.stages[0].registry.name, "minibox");
+        assert_eq!(p.stages[0].registry.name, "cratebox");
         assert_eq!(p.stages[1].registry.name, "crates-io");
     }
 

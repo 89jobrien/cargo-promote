@@ -216,7 +216,7 @@ fn main() -> Result<()> {
 
         Cmd::List { registry } => {
             let query = GiteaRegistry;
-            let reg_name = registry.as_deref().unwrap_or("minibox");
+            let reg_name = registry.as_deref().unwrap_or("cratebox");
             let reg = app
                 .cfg
                 .registry(reg_name)
@@ -287,7 +287,7 @@ fn main() -> Result<()> {
 
             eprintln!();
 
-            let reg_name = registry.as_deref().unwrap_or("minibox");
+            let reg_name = registry.as_deref().unwrap_or("cratebox");
             let reg = app
                 .cfg
                 .registry(reg_name)

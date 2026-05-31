@@ -15,7 +15,7 @@ fn conformance_c1_missing_config_returns_defaults() {
 
     let pipeline = cfg.pipeline(None).expect("C1: default pipeline must exist");
     assert_eq!(pipeline.stages.len(), 2, "C1: default has 2 stages");
-    assert_eq!(pipeline.stages[0].registry.name, "minibox");
+    assert_eq!(pipeline.stages[0].registry.name, "cratebox");
     assert_eq!(pipeline.stages[1].registry.name, "crates-io");
 }
 
@@ -109,17 +109,17 @@ fn conformance_c5_pipeline_none_returns_default() {
     );
 }
 
-// --- C6: registry("minibox") exists in defaults ---
+// --- C6: registry("cratebox") exists in defaults ---
 
 #[test]
-fn conformance_c6_default_has_minibox_registry() {
+fn conformance_c6_default_has_cratebox_registry() {
     let cfg = Config::default_config();
-    let minibox = cfg
-        .registry("minibox")
-        .expect("C6: minibox registry must exist in defaults");
-    assert_eq!(minibox.cargo_name.as_deref(), Some("minibox"));
+    let cratebox = cfg
+        .registry("cratebox")
+        .expect("C6: cratebox registry must exist in defaults");
+    assert_eq!(cratebox.cargo_name.as_deref(), Some("cratebox"));
     assert!(
-        !minibox.confirm,
-        "C6: minibox should not require confirmation"
+        !cratebox.confirm,
+        "C6: cratebox should not require confirmation"
     );
 }
