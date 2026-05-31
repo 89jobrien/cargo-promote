@@ -1,0 +1,52 @@
+project: cargo-promote
+updated: "20260531::173329"
+
+items:
+  - id: CP-001
+    title: "Expose promotion pipeline as a Rust library API"
+    description: >
+      cargo-promote is currently CLI-only. A stable lib surface would allow
+      downstream crates (e.g. release orchestrators) to drive pipelines
+      programmatically. The promote! macro (docs/ideas.md) depends on this.
+    priority: P2
+    status: open
+    files:
+      - src/lib.rs
+      - docs/ideas.md
+
+  - id: CP-002
+    title: "Expose Tailscale funnel / public endpoint for cratebox"
+    description: >
+      GitHub Actions release workflows are blocked because the Gitea registry
+      is Tailscale-only. Expose via Tailscale funnel or Caddy reverse proxy to
+      re-enable CI-driven publishes.
+    priority: P2
+    status: open
+    files:
+      - CLAUDE.md
+
+log:
+  - session: 3
+    date: "20260531::173329"
+    summary: "Added autobump config, validated promotion pipeline, renamed registry to cratebox, set up sparkfile CI"
+    commits:
+      - sha: 79f39e1
+        branch: main
+      - sha: aa03617
+        branch: main
+      - sha: 7540915
+        branch: main
+
+  - session: 2
+    date: "20260531::000000"
+    summary: "Added publish-all with topological dep ordering"
+    commits:
+      - sha: d04dd70
+        branch: main
+
+  - session: 1
+    date: "20260530::000000"
+    summary: "Scaffolded cargo-promote CLI and minibox registry infra"
+    commits:
+      - sha: 5221db1
+        branch: main
