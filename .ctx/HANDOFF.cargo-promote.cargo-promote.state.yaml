@@ -1,0 +1,8 @@
+project: cargo-promote
+generated: "20260531::185414"
+branch: main
+build: passing
+tests: "53 passed (28 unit + 25 conformance)"
+touched_files:
+  - docs/plans/2026-05-31-branch-promotion-pipeline.md
+  - .ctx/HANDOFF.cargo-promote.cargo-promote.yaml

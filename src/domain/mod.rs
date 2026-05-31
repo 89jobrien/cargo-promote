@@ -1,6 +1,7 @@
 pub mod depgraph;
 pub mod manifest;
 pub mod pipeline;
+pub mod promote_lock;
 pub mod traits;
 pub mod version;
 

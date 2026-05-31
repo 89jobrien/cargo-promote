@@ -14,7 +14,16 @@ struct ConfigFile {
     #[serde(default)]
     pipelines: HashMap<String, PipelineDef>,
     #[serde(default)]
+    pipeline: Option<BranchPipelineDef>,
+    #[serde(default)]
     autobump: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BranchPipelineDef {
+    stages: Vec<String>,
+    #[serde(default)]
+    release_branch: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -30,11 +39,19 @@ struct PipelineDef {
     stages: Vec<String>,
 }
 
+/// Configuration for a branch-based promotion pipeline.
+#[derive(Debug, Clone)]
+pub struct BranchPipelineConfig {
+    pub stages: Vec<String>,
+    pub release_branch: String,
+}
+
 /// Loaded configuration with resolved pipelines.
 #[derive(Debug)]
 pub struct Config {
     pub registries: HashMap<String, Registry>,
     pub pipelines: HashMap<String, Pipeline>,
+    pub branch_pipeline: Option<BranchPipelineConfig>,
     pub autobump: Option<BumpLevel>,
 }
 
@@ -95,9 +112,20 @@ impl Config {
             .transpose()
             .context("invalid autobump value")?;
 
+        let branch_pipeline = file.pipeline.map(|def| {
+            let release_branch = def
+                .release_branch
+                .unwrap_or_else(|| def.stages.last().cloned().unwrap_or_default());
+            BranchPipelineConfig {
+                stages: def.stages,
+                release_branch,
+            }
+        });
+
         Ok(Self {
             registries,
             pipelines,
+            branch_pipeline,
             autobump,
         })
     }
@@ -143,6 +171,7 @@ impl Config {
         Self {
             registries,
             pipelines,
+            branch_pipeline: None,
             autobump: None,
         }
     }

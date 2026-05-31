@@ -76,6 +76,144 @@ impl<P: Publisher> PipelineEngine<P> {
     }
 }
 
+/// Drives a crate through git branch-based stages.
+pub struct BranchPipeline;
+
+impl BranchPipeline {
+    /// Run a bump operation (version bump + promote.lock creation + commit/push).
+    pub fn bump(
+        krate: &CrateRef,
+        stages: &[String],
+        repo_path: &std::path::Path,
+    ) -> Result<(), PromoteError> {
+        use crate::domain::promote_lock::PromoteLock;
+
+        // Bump the version in Cargo.toml
+        let (old_version, new_version) = crate::domain::version::bump_manifest_version(
+            &krate.manifest_path,
+            crate::domain::version::BumpLevel::Patch,
+        )
+        .map_err(|e| PromoteError::Other(e))?;
+
+        eprintln!("=> bumped {} v{old_version} -> v{new_version}", krate.name);
+
+        // Compute source hash
+        let source_hash =
+            PromoteLock::compute_source_hash(repo_path).map_err(|e| PromoteError::Other(e))?;
+
+        // Create and write promote.lock
+        let entered_pipeline = stages.first().cloned().unwrap_or_default();
+        let lock = PromoteLock {
+            version: new_version.to_string(),
+            source_hash,
+            bumped_at: chrono::Local::now().format("%Y%m%d::%H%M%S").to_string(),
+            entered_pipeline,
+        };
+
+        lock.write(repo_path).map_err(|e| PromoteError::Other(e))?;
+
+        // Stage and commit
+        use std::process::Command;
+        let status = Command::new("git")
+            .args(["add", "Cargo.toml", "promote.lock"])
+            .current_dir(repo_path)
+            .status()
+            .map_err(|e| PromoteError::Other(e.into()))?;
+
+        if !status.success() {
+            return Err(PromoteError::Other(anyhow::anyhow!(
+                "failed to stage Cargo.toml and promote.lock"
+            )));
+        }
+
+        let commit_msg = format!("bump: {} v{}", krate.name, new_version);
+        let status = Command::new("git")
+            .args(["commit", "-m", &commit_msg])
+            .current_dir(repo_path)
+            .status()
+            .map_err(|e| PromoteError::Other(e.into()))?;
+
+        if !status.success() {
+            return Err(PromoteError::Other(anyhow::anyhow!(
+                "failed to commit version bump"
+            )));
+        }
+
+        // Push
+        let status = Command::new("git")
+            .args(["push", "origin", "HEAD"])
+            .current_dir(repo_path)
+            .status()
+            .map_err(|e| PromoteError::Other(e.into()))?;
+
+        if !status.success() {
+            return Err(PromoteError::Other(anyhow::anyhow!(
+                "failed to push bumped version"
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Branch from one stage to the next (with hash verification).
+    pub fn branch(
+        stages: &[String],
+        from_stage: &str,
+        merger: &dyn crate::domain::traits::BranchMerger,
+        pusher: &dyn crate::domain::traits::RemotePusher,
+        repo_path: &std::path::Path,
+    ) -> Result<(), PromoteError> {
+        use crate::domain::promote_lock::PromoteLock;
+
+        // Find the next stage
+        let from_idx = stages
+            .iter()
+            .position(|s| s == from_stage)
+            .ok_or_else(|| PromoteError::Other(anyhow::anyhow!("unknown stage '{from_stage}'")))?;
+
+        let to_stage = stages.get(from_idx + 1).ok_or_else(|| {
+            PromoteError::Other(anyhow::anyhow!("no next stage after '{from_stage}'"))
+        })?;
+
+        // Read and verify promote.lock
+        let lock = PromoteLock::read(repo_path).map_err(|e| PromoteError::Other(e))?;
+
+        lock.verify_hash(repo_path)
+            .map_err(|e| PromoteError::Other(e))?;
+
+        eprintln!("=> hash verified, merging '{from_stage}' -> '{to_stage}'");
+
+        // Perform fast-forward merge
+        merger.fast_forward(from_stage, to_stage)?;
+
+        // Push the target branch
+        pusher.push_branch(to_stage)?;
+
+        eprintln!("=> {to_stage} updated and pushed");
+
+        Ok(())
+    }
+
+    /// Publish (create git tag on release branch).
+    pub fn publish(
+        krate: &CrateRef,
+        _release_branch: &str,
+        tagger: &dyn crate::domain::traits::Tagger,
+        pusher: &dyn crate::domain::traits::RemotePusher,
+    ) -> Result<(), PromoteError> {
+        let tag = format!("v{}", krate.version);
+        let message = format!("Release {} v{}", krate.name, krate.version);
+
+        tagger.create_tag(&tag, &message)?;
+        eprintln!("=> created tag '{tag}'");
+
+        pusher.push_tag(&tag)?;
+        eprintln!("=> pushed tag '{tag}'");
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

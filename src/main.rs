@@ -123,6 +123,24 @@ enum Cmd {
         )]
         skip: String,
     },
+
+    /// Bump version and create promote.lock
+    Bump {
+        #[arg(short, long)]
+        path: Option<PathBuf>,
+        #[arg(short = 'p', long)]
+        package: Option<String>,
+    },
+
+    /// Branch from one stage to the next
+    Branch {
+        #[arg(short, long)]
+        path: Option<PathBuf>,
+        #[arg(long)]
+        from: String,
+        #[arg(long)]
+        to: Option<String>,
+    },
 }
 
 /// Shared runtime context for all pipeline commands.
@@ -370,6 +388,53 @@ fn main() -> Result<()> {
                     print_crate_line(&info.name, &info.version);
                 }
             }
+            Ok(())
+        }
+
+        Cmd::Bump { path, package } => {
+            let krate = manifest::resolve_crate(path.as_deref(), package.as_deref())?;
+            let cfg = Config::load(path.as_deref().unwrap_or(&cwd))?;
+
+            let branch_cfg = cfg
+                .branch_pipeline
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("branch pipeline not configured in promote.toml"))?;
+
+            cargo_promote::domain::pipeline::BranchPipeline::bump(
+                &krate,
+                &branch_cfg.stages,
+                path.as_deref().unwrap_or(&cwd),
+            )?;
+
+            Ok(())
+        }
+
+        Cmd::Branch { path, from, to: _ } => {
+            use cargo_promote::infra::git::local::{GitCliMerger, GitCliPusher};
+
+            let cfg = Config::load(path.as_deref().unwrap_or(&cwd))?;
+            let branch_cfg = cfg
+                .branch_pipeline
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("branch pipeline not configured in promote.toml"))?;
+
+            let repo_root = path.as_deref().unwrap_or(&cwd);
+
+            let merger = GitCliMerger {
+                repo_root: repo_root.to_path_buf(),
+            };
+            let pusher = GitCliPusher {
+                repo_root: repo_root.to_path_buf(),
+            };
+
+            cargo_promote::domain::pipeline::BranchPipeline::branch(
+                &branch_cfg.stages,
+                &from,
+                &merger,
+                &pusher,
+                repo_root,
+            )?;
+
             Ok(())
         }
     }
