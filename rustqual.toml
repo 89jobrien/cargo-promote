@@ -1,0 +1,7 @@
+# rustqual configuration for cargo-promote
+# LocalGit methods are public API for future CLI commands — not dead code.
+
+ignore_functions = ["main"]
+
+[duplicates]
+detect_dead_code = false
