@@ -1,5 +1,5 @@
 project: cargo-promote
-updated: "20260531::185414"
+updated: "20260531::190558"
 
 items:
   - id: CP-001
@@ -26,6 +26,13 @@ items:
       - CLAUDE.md
 
 log:
+  - session: 6
+    date: "20260531::190558"
+    summary: "Session handoff: CP-003 complete, updated HANDOFF, state file, .gitignore patterns"
+    commits:
+      - sha: dfa743d
+        branch: main
+
   - session: 5
     date: "20260531::185800"
     summary: "Implemented branch promotion pipeline: PromoteLock, BranchMerger/RemotePusher/Tagger ports, GitCli adapters, BranchPipeline orchestrator, bump/branch commands. All 53 tests passing."
