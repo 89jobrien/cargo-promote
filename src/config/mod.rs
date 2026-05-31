@@ -92,16 +92,14 @@ impl Config {
 
     /// Hardcoded default: minibox -> crates.io (backwards compatible).
     pub fn default_config() -> Self {
+        let base_url = std::env::var("REGISTRY_URL")
+            .unwrap_or_else(|_| "http://100.105.75.7:3000".to_string());
+        let user = std::env::var("REGISTRY_USER").unwrap_or_else(|_| "joe".to_string());
+
         let minibox = Registry {
             name: "minibox".to_string(),
             cargo_name: Some("minibox".to_string()),
-            api_url: Some(
-                std::env::var("REGISTRY_URL")
-                    .unwrap_or_else(|_| "http://100.105.75.7:3000".to_string())
-                    + "/api/packages/"
-                    + &std::env::var("REGISTRY_USER").unwrap_or_else(|_| "joe".to_string())
-                    + "/cargo",
-            ),
+            api_url: Some(format!("{base_url}/api/packages/{user}/cargo")),
             confirm: false,
         };
 
@@ -112,12 +110,12 @@ impl Config {
             confirm: true,
         };
 
-        let mut registries = HashMap::new();
-        registries.insert("minibox".to_string(), minibox.clone());
-        registries.insert("crates-io".to_string(), crates_io.clone());
+        let registries = HashMap::from([
+            ("minibox".to_string(), minibox.clone()),
+            ("crates-io".to_string(), crates_io.clone()),
+        ]);
 
-        let mut pipelines = HashMap::new();
-        pipelines.insert(
+        let pipelines = HashMap::from([(
             "default".to_string(),
             Pipeline {
                 name: "default".to_string(),
@@ -128,7 +126,7 @@ impl Config {
                     },
                 ],
             },
-        );
+        )]);
 
         Self {
             registries,

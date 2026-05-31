@@ -7,27 +7,25 @@ pub fn resolve_crate(path: Option<&Path>, package: Option<&str>) -> Result<Crate
     let manifest_path = manifest_for(path);
     let doc = read_manifest(&manifest_path)?;
 
-    if let Some(pkg_name) = package {
-        return Ok(CrateRef {
-            name: pkg_name.to_string(),
-            version: extract_version(&doc).unwrap_or_else(|| "0.0.0".to_string()),
-            manifest_path,
-        });
-    }
-
-    let pkg = doc.get("package").context("no [package] in Cargo.toml")?;
-    let name = pkg
-        .get("name")
-        .and_then(|n| n.as_str())
-        .context("missing package.name")?;
-    let version = pkg
-        .get("version")
-        .and_then(|v| v.as_str())
-        .unwrap_or("0.0.0");
+    let (name, version) = if let Some(pkg_name) = package {
+        let ver = extract_version(&doc).unwrap_or_else(|| "0.0.0".to_string());
+        (pkg_name.to_string(), ver)
+    } else {
+        let pkg = doc.get("package").context("no [package] in Cargo.toml")?;
+        let n = pkg
+            .get("name")
+            .and_then(|n| n.as_str())
+            .context("missing package.name")?;
+        let v = pkg
+            .get("version")
+            .and_then(|v| v.as_str())
+            .unwrap_or("0.0.0");
+        (n.to_string(), v.to_string())
+    };
 
     Ok(CrateRef {
-        name: name.to_string(),
-        version: version.to_string(),
+        name,
+        version,
         manifest_path,
     })
 }

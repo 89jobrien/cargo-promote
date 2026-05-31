@@ -9,6 +9,10 @@ use cargo_promote::domain::manifest::{self, ManifestDescription};
 use cargo_promote::domain::pipeline::PipelineEngine;
 use cargo_promote::domain::traits::RegistryQuery;
 use cargo_promote::domain::{CrateRef, Pipeline, PublishOpts, Stage};
+
+fn print_crate_line(name: &str, version: &str) {
+    println!("  {name} v{version}");
+}
 use cargo_promote::infra::cargo::CargoPublisher;
 use cargo_promote::infra::git::gitea::GiteaRegistry;
 
@@ -222,7 +226,7 @@ fn main() -> Result<()> {
                 println!("  (no crates published)");
             } else {
                 for c in &crates {
-                    println!("  {} v{}", c.name, c.max_version);
+                    print_crate_line(&c.name, &c.max_version);
                 }
                 println!("\n  {} crate(s) total", crates.len());
             }
@@ -334,11 +338,11 @@ fn main() -> Result<()> {
                 ManifestDescription::Workspace(members) => {
                     eprintln!("Workspace with {} members:", members.len());
                     for m in &members {
-                        println!("  {} v{}", m.name, m.version);
+                        print_crate_line(&m.name, &m.version);
                     }
                 }
                 ManifestDescription::Single(info) => {
-                    println!("  {} v{}", info.name, info.version);
+                    print_crate_line(&info.name, &info.version);
                 }
             }
             Ok(())

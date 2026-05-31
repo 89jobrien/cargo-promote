@@ -19,92 +19,77 @@ pub struct CrateNode {
 
 /// Scan a directory tree for all Cargo.toml files and build a dep graph.
 pub fn scan_workspace_tree(root: &Path, skip: &[&str]) -> Result<Vec<CrateNode>> {
-    let mut nodes = Vec::new();
-    let mut known_names: HashSet<String> = HashSet::new();
-
-    // First pass: collect all crate names
-    for entry in std::fs::read_dir(root).context("cannot read root dir")? {
-        let entry = entry?;
-        let dir = entry.path();
-        if !dir.is_dir() {
-            continue;
-        }
-        let repo_name = dir.file_name().unwrap().to_string_lossy().to_string();
-        if skip.iter().any(|s| *s == repo_name) {
-            continue;
-        }
-        // Skip hidden dirs (.maestro, .claude, etc.)
-        if repo_name.starts_with('.') {
-            continue;
-        }
-
-        let manifest = dir.join("Cargo.toml");
-        if !manifest.exists() {
-            continue;
-        }
-
-        let content = std::fs::read_to_string(&manifest).unwrap_or_default();
-        let doc: toml::Value = match content.parse() {
-            Ok(d) => d,
-            Err(_) => continue,
-        };
-
-        if let Some(members) = doc
-            .get("workspace")
-            .and_then(|w| w.get("members"))
-            .and_then(|m| m.as_array())
-        {
-            for m in members.iter().filter_map(|v| v.as_str()) {
-                let mpath = dir.join(m).join("Cargo.toml");
-                if let Some(name) = read_crate_name(&mpath) {
-                    known_names.insert(name);
-                }
-            }
-        } else if let Some(name) = read_crate_name(&manifest) {
-            known_names.insert(name);
-        }
-    }
-
-    // Second pass: build nodes with internal deps
-    for entry in std::fs::read_dir(root)? {
-        let entry = entry?;
-        let dir = entry.path();
-        if !dir.is_dir() {
-            continue;
-        }
-        let repo_name = dir.file_name().unwrap().to_string_lossy().to_string();
-        if skip.iter().any(|s| *s == repo_name) || repo_name.starts_with('.') {
-            continue;
-        }
-
-        let manifest = dir.join("Cargo.toml");
-        if !manifest.exists() {
-            continue;
-        }
-
-        let content = std::fs::read_to_string(&manifest).unwrap_or_default();
-        let doc: toml::Value = match content.parse() {
-            Ok(d) => d,
-            Err(_) => continue,
-        };
-
-        if let Some(members) = doc
-            .get("workspace")
-            .and_then(|w| w.get("members"))
-            .and_then(|m| m.as_array())
-        {
-            for m in members.iter().filter_map(|v| v.as_str()) {
-                let mpath = dir.join(m).join("Cargo.toml");
-                if let Some(node) = build_node(&mpath, &known_names) {
-                    nodes.push(node);
-                }
-            }
-        } else if let Some(node) = build_node(&manifest, &known_names) {
-            nodes.push(node);
-        }
-    }
-
+    let dirs = scannable_dirs(root, skip)?;
+    let all_manifests = resolve_all_manifests(&dirs);
+    let known_names = collect_crate_names(&all_manifests);
+    let nodes = all_manifests
+        .iter()
+        .filter_map(|m| build_node(m, &known_names))
+        .collect();
     Ok(nodes)
+}
+
+/// Return repo directories under `root` that are not skipped/hidden and contain a Cargo.toml.
+fn scannable_dirs(root: &Path, skip: &[&str]) -> Result<Vec<PathBuf>> {
+    let mut dirs = Vec::new();
+    for entry in std::fs::read_dir(root).context("cannot read root dir")? {
+        let dir = entry?.path();
+        if !dir.is_dir() {
+            continue;
+        }
+        let name = dir
+            .file_name()
+            .context("dir has no name")?
+            .to_string_lossy();
+        if name.starts_with('.') || skip.iter().any(|s| *s == &*name) {
+            continue;
+        }
+        if dir.join("Cargo.toml").exists() {
+            dirs.push(dir);
+        }
+    }
+    Ok(dirs)
+}
+
+/// Expand workspace members into individual manifest paths.
+fn resolve_all_manifests(dirs: &[PathBuf]) -> Vec<PathBuf> {
+    dirs.iter()
+        .flat_map(|dir| {
+            let manifest = dir.join("Cargo.toml");
+            parse_manifest(&manifest)
+                .map(|doc| manifest_paths(&doc, dir))
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+fn collect_crate_names(manifests: &[PathBuf]) -> HashSet<String> {
+    manifests
+        .iter()
+        .filter_map(|m| read_crate_name(m))
+        .collect()
+}
+
+/// Return manifest paths for workspace members, or the root manifest itself.
+fn manifest_paths(doc: &toml::Value, dir: &Path) -> Vec<PathBuf> {
+    if let Some(members) = doc
+        .get("workspace")
+        .and_then(|w| w.get("members"))
+        .and_then(|m| m.as_array())
+    {
+        members
+            .iter()
+            .filter_map(|v| v.as_str())
+            .map(|m| dir.join(m).join("Cargo.toml"))
+            .collect()
+    } else {
+        vec![dir.join("Cargo.toml")]
+    }
+}
+
+fn parse_manifest(path: &Path) -> Option<toml::Value> {
+    let content = std::fs::read_to_string(path).ok()?;
+    content.parse().ok()
 }
 
 /// Topological sort of crate nodes. Returns names in publish order.
@@ -172,8 +157,7 @@ fn read_crate_name(manifest: &Path) -> Option<String> {
 }
 
 fn build_node(manifest: &Path, known_names: &HashSet<String>) -> Option<CrateNode> {
-    let content = std::fs::read_to_string(manifest).ok()?;
-    let doc: toml::Value = content.parse().ok()?;
+    let doc = parse_manifest(manifest)?;
 
     let pkg = doc.get("package")?;
     let name = pkg.get("name").and_then(|n| n.as_str())?;
@@ -182,38 +166,14 @@ fn build_node(manifest: &Path, known_names: &HashSet<String>) -> Option<CrateNod
         .and_then(|v| v.as_str())
         .unwrap_or("0.0.0");
 
-    // xtask crates are never publishable (workspace automation)
     let is_xtask = name == "xtask" || name.ends_with("-xtask");
-
     let unpublishable = is_xtask
         || pkg
             .get("publish")
             .and_then(|p| p.as_bool())
-            .map(|b| !b)
-            .unwrap_or(false);
+            .is_some_and(|b| !b);
 
-    let mut internal_deps = Vec::new();
-    let mut path_only_deps = Vec::new();
-
-    // Check [dependencies] and [build-dependencies] only.
-    // dev-dependencies don't block publishing.
-    for section in ["dependencies", "build-dependencies"] {
-        if let Some(deps) = doc.get(section).and_then(|d| d.as_table()) {
-            for (dep_name, dep_val) in deps {
-                if !known_names.contains(dep_name) {
-                    continue;
-                }
-                internal_deps.push(dep_name.clone());
-
-                // Check if path-only (no version field)
-                if let Some(tbl) = dep_val.as_table() {
-                    if tbl.contains_key("path") && !tbl.contains_key("version") {
-                        path_only_deps.push(dep_name.clone());
-                    }
-                }
-            }
-        }
-    }
+    let (internal_deps, path_only_deps) = collect_internal_deps(&doc, known_names);
 
     Some(CrateNode {
         name: name.to_string(),
@@ -223,6 +183,35 @@ fn build_node(manifest: &Path, known_names: &HashSet<String>) -> Option<CrateNod
         unpublishable,
         path_only_deps,
     })
+}
+
+/// Extract internal deps and path-only deps from [dependencies] and [build-dependencies].
+fn collect_internal_deps(
+    doc: &toml::Value,
+    known_names: &HashSet<String>,
+) -> (Vec<String>, Vec<String>) {
+    let mut internal = Vec::new();
+    let mut path_only = Vec::new();
+
+    for section in ["dependencies", "build-dependencies"] {
+        let Some(deps) = doc.get(section).and_then(|d| d.as_table()) else {
+            continue;
+        };
+        for (dep_name, dep_val) in deps {
+            if !known_names.contains(dep_name) {
+                continue;
+            }
+            internal.push(dep_name.clone());
+            let is_path_only = dep_val
+                .as_table()
+                .is_some_and(|t| t.contains_key("path") && !t.contains_key("version"));
+            if is_path_only {
+                path_only.push(dep_name.clone());
+            }
+        }
+    }
+
+    (internal, path_only)
 }
 
 #[cfg(test)]
