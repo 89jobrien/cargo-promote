@@ -1,5 +1,5 @@
 project: cargo-promote
-updated: "20260531::173329"
+updated: "20260531::185414"
 
 items:
   - id: CP-001
@@ -25,7 +25,32 @@ items:
     files:
       - CLAUDE.md
 
+  - id: CP-003
+    title: "Implement branch promotion pipeline"
+    description: >
+      Design approved. Add bump, branch, and revised publish commands.
+      Stages are git branches (default: develop -> staging -> production).
+      CI chain: each stage calls cargo-promote branch --from <stage> on green.
+      promote.lock written at pipeline entry with SHA-256 of publishable
+      sources, verified at each hop. See
+      docs/plans/2026-05-31-branch-promotion-pipeline.md.
+    priority: P1
+    status: open
+    files:
+      - src/domain/pipeline/mod.rs
+      - src/domain/traits/mod.rs
+      - src/config/mod.rs
+      - src/main.rs
+      - docs/plans/2026-05-31-branch-promotion-pipeline.md
+
 log:
+  - session: 4
+    date: "20260531::185414"
+    summary: "Designed branch promotion pipeline, approved design doc, updated default stages to develop/staging/production"
+    commits:
+      - sha: 90f785f
+        branch: main
+
   - session: 3
     date: "20260531::173329"
     summary: "Added autobump config, validated promotion pipeline, renamed registry to cratebox, set up sparkfile CI"
