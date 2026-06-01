@@ -9,6 +9,10 @@ deferred promotions, and forge integration.
 
 ```bash
 cargo install cargo-promote
+# or from git
+cargo install --git https://github.com/89jobrien/cargo-promote
+# or from a local checkout
+cargo install --path .
 ```
 
 ## Commands
@@ -25,15 +29,22 @@ cargo-promote publish -p my-crate
 # Publish to a named registry directly
 cargo-promote publish --registry cratebox
 
+# Select a named pipeline
+cargo-promote publish --pipeline staging-only
+
 # Publish even if the version already exists on the registry
 cargo-promote publish --force
 
 # Publish + promote through all pipeline stages
 cargo-promote ship -p my-crate
 
+# Ship with auto-confirm and force
+cargo-promote ship -p my-crate -y --force
+
 # Publish all crates under a directory in dependency order
 cargo-promote publish-all --path ~/dev --dry-run
 cargo-promote publish-all --force --skip "sandbox,experiments"
+cargo-promote publish-all --registry cratebox --allow-dirty
 ```
 
 ### Promotion
@@ -41,6 +52,9 @@ cargo-promote publish-all --force --skip "sandbox,experiments"
 ```bash
 # Promote from one pipeline stage to the next
 cargo-promote promote -p my-crate --from cratebox
+
+# Promote with auto-confirm and dry-run
+cargo-promote promote -p my-crate --from cratebox -y --dry-run
 
 # Bump version and create promote.lock
 cargo-promote bump
@@ -60,8 +74,12 @@ cargo-promote defer --from cratebox
 # Defer a branch promotion
 cargo-promote defer --branch --from develop
 
+# Defer with a notification command
+cargo-promote defer --from cratebox --command notify-send "promotion deferred"
+
 # Confirm or reject a pending deferral
 cargo-promote confirm <ticket>
+cargo-promote confirm <ticket> --reason "passed QA"
 cargo-promote reject <ticket> --reason "failed QA"
 
 # List deferrals
@@ -116,9 +134,10 @@ pipeline = "staging-only"       # use a different pipeline
 
 ### Forge Integration
 
-Connect to a Gitea or GitHub forge for PR-based deferral workflows.
-When configured, `defer` creates a PR on the forge, and `confirm`
-closes it automatically.
+Connect to a Gitea or GitHub forge for PR-based deferral workflows
+and release creation. When configured, `defer` creates a PR on the
+forge, and `confirm` comments and closes it automatically. The
+`Forge` trait also supports `create_release` for tag-based releases.
 
 ```toml
 [forge]
@@ -154,9 +173,10 @@ The pipeline works as a CI chain:
 3. `cargo-promote publish` on `production` tags the release -- a
    tag-triggered CI workflow handles registry publishing
 
-`promote.lock` tracks the version and a SHA-256 hash of publishable
-source files (`src/`, `Cargo.toml`, `Cargo.lock`). The hash is
-verified at every branch hop to ensure nothing mutated mid-pipeline.
+`promote.lock` (YAML) tracks the version and a SHA-256 hash of
+publishable files: `Cargo.toml`, `Cargo.lock`, and all `*.rs` files
+under `src/`. The hash is verified at every branch hop to ensure
+nothing mutated mid-pipeline.
 
 ### Registry Auto-Discovery
 
@@ -164,6 +184,24 @@ cargo-promote automatically discovers registries from
 `.cargo/config.toml` files by walking ancestor directories and
 checking `$CARGO_HOME`. Entries in `promote.toml` take precedence
 over discovered registries.
+
+## Architecture
+
+Hexagonal architecture with domain ports (traits) and infrastructure
+adapters:
+
+- **Domain types**: `CrateRef`, `CrateInfo`, `Pipeline`, `Stage`,
+  `PublishOpts`, `Deferral`, `DeferralKind`, `DeferralStatus`,
+  `PromoteLock`, `ManifestDescription`
+- **Ports (traits)**: `Publisher`, `RegistryQuery`, `PipelineRunner`,
+  `BranchMerger`, `RemotePusher`, `Tagger`, `TokenResolver`,
+  `Notifier`, `Forge`
+- **Adapters**: `CargoPublisher`, `GiteaRegistry`, `GitHubRegistry`,
+  `GiteaForge`, `LocalGit` (implements `BranchMerger`,
+  `RemotePusher`, `Tagger`), `CargoTokenResolver`, `SpawnNotifier`
+- **API**: `Api` facade with `ApiBuilder` for dependency injection
+- **Config**: `Config` with per-package overrides and registry
+  auto-discovery from `.cargo/config.toml`
 
 ## Cargo Registry Setup
 
@@ -192,20 +230,7 @@ Without a `promote.toml`, cargo-promote uses built-in defaults:
   `http://100.105.75.7:3000/api/packages/joe/cargo` (override with
   `REGISTRY_URL` and `REGISTRY_USER` env vars)
 - Pipeline: cratebox -> crates-io (crates-io requires confirmation)
-
-## Architecture
-
-Hexagonal architecture with domain ports (traits) and infrastructure
-adapters:
-
-- **Domain**: `CrateRef`, `Pipeline`, `Stage`, `PublishOpts`,
-  `Deferral`, `PromoteLock`
-- **Ports**: `Publisher`, `RegistryQuery`, `PipelineRunner`,
-  `BranchMerger`, `RemotePusher`, `Tagger`, `TokenResolver`,
-  `Notifier`, `Forge`
-- **Adapters**: `CargoPublisher`, `GiteaRegistry`, `GiteaForge`,
-  `LocalGit`, `CargoTokenResolver`
-- **API**: `Api` facade with `ApiBuilder` for dependency injection
+- `publish-all` skips a default set of repos (maestro, sandbox, etc.)
 
 ## Build
 
