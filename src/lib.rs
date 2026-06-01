@@ -12,7 +12,7 @@ use domain::deferral::{Deferral, DeferralKind, DeferralStatus};
 use domain::depgraph;
 use domain::manifest::{self, ManifestDescription};
 use domain::pipeline::PipelineEngine;
-use domain::traits::RegistryQuery;
+use domain::traits::{Notifier, PipelineRunner, RegistryQuery};
 use domain::version;
 use domain::{CrateInfo, CrateRef, Pipeline, PublishOpts, Stage};
 use infra::cargo::CargoPublisher;
@@ -35,22 +35,102 @@ pub fn maybe_autobump(krate: CrateRef, cfg: &Config) -> Result<CrateRef> {
 /// Library API for driving promotion pipelines programmatically.
 pub struct Api {
     config: Config,
-    engine: PipelineEngine<CargoPublisher>,
+    engine: Box<dyn PipelineRunner>,
+    registry_query: Box<dyn RegistryQuery>,
+    notifier: Box<dyn Notifier>,
+}
+
+/// Builder for `Api` with injectable dependencies.
+pub struct ApiBuilder {
+    config: Option<Config>,
+    engine: Option<Box<dyn PipelineRunner>>,
+    registry_query: Option<Box<dyn RegistryQuery>>,
+    notifier: Option<Box<dyn Notifier>>,
+}
+
+impl ApiBuilder {
+    pub fn config(mut self, config: Config) -> Self {
+        self.config = Some(config);
+        self
+    }
+
+    pub fn engine(mut self, engine: Box<dyn PipelineRunner>) -> Self {
+        self.engine = Some(engine);
+        self
+    }
+
+    pub fn registry_query(mut self, query: Box<dyn RegistryQuery>) -> Self {
+        self.registry_query = Some(query);
+        self
+    }
+
+    pub fn notifier(mut self, notifier: Box<dyn Notifier>) -> Self {
+        self.notifier = Some(notifier);
+        self
+    }
+
+    pub fn build(self) -> Result<Api> {
+        Ok(Api {
+            config: self
+                .config
+                .ok_or_else(|| anyhow::anyhow!("config required"))?,
+            engine: self
+                .engine
+                .ok_or_else(|| anyhow::anyhow!("engine required"))?,
+            registry_query: self
+                .registry_query
+                .ok_or_else(|| anyhow::anyhow!("registry_query required"))?,
+            notifier: self
+                .notifier
+                .ok_or_else(|| anyhow::anyhow!("notifier required"))?,
+        })
+    }
 }
 
 impl Api {
-    /// Load config from `promote.toml` in `dir` and build the engine
-    /// with an auto-accepting confirmer (no interactive prompt).
+    /// Build with default adapters (CargoPublisher, GiteaRegistry,
+    /// NoopNotifier) and auto-accepting confirmer.
     pub fn new(dir: &Path) -> Result<Self> {
         Self::with_confirmer(dir, |_| true)
     }
 
-    /// Load config and build the engine with a custom confirmation
-    /// callback.
+    /// Build with default adapters and a custom confirmer.
     pub fn with_confirmer(dir: &Path, confirmer: impl Fn(&str) -> bool + 'static) -> Result<Self> {
         let config = Config::load(dir)?;
         let engine = PipelineEngine::new(CargoPublisher, confirmer);
-        Ok(Self { config, engine })
+        Ok(Self {
+            config,
+            engine: Box::new(engine),
+            registry_query: Box::new(GiteaRegistry),
+            notifier: Box::new(infra::notify::NoopNotifier),
+        })
+    }
+
+    /// Build with default adapters, custom confirmer, and a
+    /// notification command.
+    pub fn with_notifier(
+        dir: &Path,
+        confirmer: impl Fn(&str) -> bool + 'static,
+        command: Vec<String>,
+    ) -> Result<Self> {
+        let config = Config::load(dir)?;
+        let engine = PipelineEngine::new(CargoPublisher, confirmer);
+        Ok(Self {
+            config,
+            engine: Box::new(engine),
+            registry_query: Box::new(GiteaRegistry),
+            notifier: Box::new(infra::notify::SpawnNotifier { command }),
+        })
+    }
+
+    /// Return a builder for full dependency injection.
+    pub fn builder() -> ApiBuilder {
+        ApiBuilder {
+            config: None,
+            engine: None,
+            registry_query: None,
+            notifier: None,
+        }
     }
 
     /// Access the loaded configuration.
@@ -63,7 +143,7 @@ impl Api {
     fn resolve_pipeline(&self, name: Option<&str>) -> Result<&Pipeline> {
         self.config
             .pipeline(name)
-            .ok_or_else(|| anyhow::anyhow!("pipeline '{}' not found", name.unwrap_or("default"),))
+            .ok_or_else(|| anyhow::anyhow!("pipeline '{}' not found", name.unwrap_or("default")))
     }
 
     /// Publish a crate to the first stage of a pipeline (or a named
@@ -145,13 +225,12 @@ impl Api {
 
     /// List crates in a registry.
     pub fn list(&self, registry: Option<&str>) -> Result<Vec<CrateInfo>> {
-        let query = GiteaRegistry;
         let reg_name = registry.unwrap_or("cratebox");
         let reg = self
             .config
             .registry(reg_name)
             .ok_or_else(|| anyhow::anyhow!("unknown registry '{reg_name}'"))?;
-        let crates = query.list_crates(reg)?;
+        let crates = self.registry_query.list_crates(reg)?;
         Ok(crates)
     }
 
@@ -274,16 +353,14 @@ impl Api {
 
     /// Defer a crate's promotion to the next pipeline stage.
     ///
-    /// Creates a pending deferral ticket and optionally fires a
-    /// notification command. The promotion is provisional until
-    /// confirmed or rejected.
+    /// Creates a pending deferral ticket and fires a notification.
+    /// The promotion is provisional until confirmed or rejected.
     pub fn defer_to(
         &self,
         path: Option<&Path>,
         package: Option<&str>,
         from: &str,
         pipeline: Option<&str>,
-        command: Vec<String>,
         repo_root: &Path,
     ) -> Result<Deferral> {
         let krate = manifest::resolve_crate(path, package)?;
@@ -314,12 +391,12 @@ impl Api {
             kind: DeferralKind::Registry,
             deferred_at: now.format("%Y%m%d.%H%M%S").to_string(),
             source_hash,
-            command: command.clone(),
+            command: vec![],
             reason: String::new(),
         };
 
         deferral.write(repo_root)?;
-        fire_notification(&command);
+        self.notifier.on_deferred(&deferral)?;
         Ok(deferral)
     }
 
@@ -331,7 +408,6 @@ impl Api {
         path: Option<&Path>,
         package: Option<&str>,
         from: &str,
-        command: Vec<String>,
         repo_root: &Path,
     ) -> Result<Deferral> {
         let krate = manifest::resolve_crate(path, package)?;
@@ -368,12 +444,12 @@ impl Api {
             kind: DeferralKind::Branch,
             deferred_at: now.format("%Y%m%d.%H%M%S").to_string(),
             source_hash: lock.source_hash.clone(),
-            command: command.clone(),
+            command: vec![],
             reason: String::new(),
         };
 
         deferral.write(repo_root)?;
-        fire_notification(&command);
+        self.notifier.on_deferred(&deferral)?;
         Ok(deferral)
     }
 
@@ -436,27 +512,6 @@ impl Api {
             Deferral::list_pending(repo_root)
         } else {
             Deferral::list(repo_root)
-        }
-    }
-}
-
-/// Fire a notification command (non-blocking, best-effort).
-///
-/// Uses `spawn()` so the CLI does not block waiting for the
-/// child process to exit.
-fn fire_notification(command: &[String]) {
-    if command.is_empty() {
-        return;
-    }
-    match std::process::Command::new(&command[0])
-        .args(&command[1..])
-        .spawn()
-    {
-        Ok(_child) => {
-            eprintln!("=> notification command spawned");
-        }
-        Err(e) => {
-            eprintln!("=> notification command failed to start: {e}");
         }
     }
 }

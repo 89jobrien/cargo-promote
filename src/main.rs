@@ -329,23 +329,16 @@ fn main() -> Result<()> {
             command,
         } => {
             let dir = path.as_deref().unwrap_or(&cwd);
-            let api = Api::with_confirmer(dir, interactive_confirmer)?;
+            let api = Api::with_notifier(dir, interactive_confirmer, command)?;
             let repo_root = path.as_deref().unwrap_or(&cwd);
             let deferral = if branch {
-                api.defer_branch(
-                    path.as_deref(),
-                    package.as_deref(),
-                    &from,
-                    command,
-                    repo_root,
-                )?
+                api.defer_branch(path.as_deref(), package.as_deref(), &from, repo_root)?
             } else {
                 api.defer_to(
                     path.as_deref(),
                     package.as_deref(),
                     &from,
                     pipeline.as_deref(),
-                    command,
                     repo_root,
                 )?
             };
