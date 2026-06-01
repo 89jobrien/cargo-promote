@@ -1,4 +1,4 @@
-use super::{CrateInfo, CrateRef, PromoteError, PublishOpts, Registry};
+use super::{CrateInfo, CrateRef, Pipeline, PromoteError, PublishOpts, Registry, Stage};
 
 /// Port: publish a crate to a registry.
 pub trait Publisher {
@@ -61,4 +61,29 @@ impl<T: Tagger> Tagger for &T {
     fn create_tag(&self, name: &str, message: &str) -> Result<(), PromoteError> {
         (**self).create_tag(name, message)
     }
+}
+
+/// Port: drive a crate through pipeline stages.
+pub trait PipelineRunner {
+    fn run_stage(
+        &self,
+        krate: &CrateRef,
+        stage: &Stage,
+        opts: &PublishOpts,
+    ) -> Result<(), PromoteError>;
+
+    fn run_full(
+        &self,
+        krate: &CrateRef,
+        pipeline: &Pipeline,
+        opts: &PublishOpts,
+    ) -> Result<(), PromoteError>;
+
+    fn promote_next(
+        &self,
+        krate: &CrateRef,
+        pipeline: &Pipeline,
+        current_stage: &str,
+        opts: &PublishOpts,
+    ) -> Result<(), PromoteError>;
 }

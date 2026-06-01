@@ -1,4 +1,4 @@
-use super::traits::Publisher;
+use super::traits::{PipelineRunner, Publisher};
 use super::{CrateRef, Pipeline, PromoteError, PublishOpts, Stage};
 
 /// Drives a crate through pipeline stages.
@@ -73,6 +73,36 @@ impl<P: Publisher> PipelineEngine<P> {
             })?;
 
         self.run_stage(krate, next, opts)
+    }
+}
+
+impl<P: Publisher> PipelineRunner for PipelineEngine<P> {
+    fn run_stage(
+        &self,
+        krate: &CrateRef,
+        stage: &Stage,
+        opts: &PublishOpts,
+    ) -> Result<(), PromoteError> {
+        PipelineEngine::run_stage(self, krate, stage, opts)
+    }
+
+    fn run_full(
+        &self,
+        krate: &CrateRef,
+        pipeline: &Pipeline,
+        opts: &PublishOpts,
+    ) -> Result<(), PromoteError> {
+        PipelineEngine::run_full(self, krate, pipeline, opts)
+    }
+
+    fn promote_next(
+        &self,
+        krate: &CrateRef,
+        pipeline: &Pipeline,
+        current_stage: &str,
+        opts: &PublishOpts,
+    ) -> Result<(), PromoteError> {
+        PipelineEngine::promote_next(self, krate, pipeline, current_stage, opts)
     }
 }
 
@@ -356,6 +386,27 @@ mod tests {
             &PublishOpts::default(),
         );
         assert!(matches!(result, Err(PromoteError::StageNotFound { .. })));
+    }
+
+    #[test]
+    fn pipeline_engine_implements_pipeline_runner() {
+        let pub_ = RecordingPublisher::new();
+        let engine = PipelineEngine::new(&pub_, |_| true);
+        let runner: &dyn crate::domain::traits::PipelineRunner = &engine;
+        let opts = PublishOpts {
+            skip_confirm: true,
+            ..Default::default()
+        };
+        runner
+            .run_stage(
+                &test_crate(),
+                &Stage {
+                    registry: reg("staging", false),
+                },
+                &opts,
+            )
+            .expect("should succeed via trait object");
+        assert_eq!(pub_.published(), vec!["staging"]);
     }
 
     #[test]
