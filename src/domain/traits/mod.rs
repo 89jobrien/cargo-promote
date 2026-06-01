@@ -110,14 +110,17 @@ pub trait Notifier {
     fn on_deferred(&self, deferral: &Deferral) -> Result<(), PromoteError>;
 }
 
-/// Port: interact with a git forge (Gitea, GitHub, GitLab) for
-/// PR/release management.
-/// TODO(#8): implement GiteaForge and GitHubForge adapters
+/// Port: interact with a code forge (Gitea, GitHub, etc.).
 pub trait Forge {
-    /// Create a release for the given tag.
-    fn create_release(&self, tag: &str, body: &str) -> Result<(), PromoteError>;
+    /// Create a release on the forge.
+    fn create_release(
+        &self,
+        tag: &str,
+        name: &str,
+        body: &str,
+    ) -> Result<(), PromoteError>;
 
-    /// Open a pull request and return its number.
+    /// Create a pull request. Returns the PR number.
     fn create_pr(
         &self,
         title: &str,
@@ -126,20 +129,26 @@ pub trait Forge {
         base: &str,
     ) -> Result<u64, PromoteError>;
 
-    /// Post a comment on an existing PR.
+    /// Comment on a pull request (or issue).
     fn comment_pr(&self, pr_number: u64, body: &str) -> Result<(), PromoteError>;
 
-    /// Close a PR.
+    /// Close a pull request.
     fn close_pr(&self, pr_number: u64) -> Result<(), PromoteError>;
 }
 
-/// No-op forge for environments without forge access.
+/// No-op implementation of `Forge` for when no forge is configured.
 pub struct NoopForge;
 
 impl Forge for NoopForge {
-    fn create_release(&self, _tag: &str, _body: &str) -> Result<(), PromoteError> {
+    fn create_release(
+        &self,
+        _tag: &str,
+        _name: &str,
+        _body: &str,
+    ) -> Result<(), PromoteError> {
         Ok(())
     }
+
     fn create_pr(
         &self,
         _title: &str,
@@ -149,10 +158,42 @@ impl Forge for NoopForge {
     ) -> Result<u64, PromoteError> {
         Ok(0)
     }
+
     fn comment_pr(&self, _pr_number: u64, _body: &str) -> Result<(), PromoteError> {
         Ok(())
     }
+
     fn close_pr(&self, _pr_number: u64) -> Result<(), PromoteError> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn noop_forge_create_release_returns_ok() {
+        let forge = NoopForge;
+        assert!(forge.create_release("v0.1.0", "Release 0.1.0", "body").is_ok());
+    }
+
+    #[test]
+    fn noop_forge_create_pr_returns_zero() {
+        let forge = NoopForge;
+        let pr = forge.create_pr("title", "body", "head", "base").unwrap();
+        assert_eq!(pr, 0);
+    }
+
+    #[test]
+    fn noop_forge_comment_pr_returns_ok() {
+        let forge = NoopForge;
+        assert!(forge.comment_pr(1, "comment").is_ok());
+    }
+
+    #[test]
+    fn noop_forge_close_pr_returns_ok() {
+        let forge = NoopForge;
+        assert!(forge.close_pr(1).is_ok());
     }
 }

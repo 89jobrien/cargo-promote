@@ -12,7 +12,7 @@ use domain::deferral::{Deferral, DeferralKind, DeferralStatus};
 use domain::depgraph;
 use domain::manifest::{self, ManifestDescription};
 use domain::pipeline::PipelineEngine;
-use domain::traits::{Notifier, PipelineRunner, RegistryQuery};
+use domain::traits::{Forge, NoopForge, Notifier, PipelineRunner, RegistryQuery};
 use domain::version;
 use domain::{CrateInfo, CrateRef, Pipeline, PublishOpts, Stage};
 use infra::cargo::CargoPublisher;
@@ -40,7 +40,63 @@ pub struct Api {
     engine: Box<dyn PipelineRunner>,
     registry_query: Box<dyn RegistryQuery>,
     notifier: Box<dyn Notifier>,
+    forge: Box<dyn Forge>,
 }
+
+/// Builder for `Api` with injectable dependencies.
+pub struct ApiBuilder {
+    config: Option<Config>,
+    engine: Option<Box<dyn PipelineRunner>>,
+    registry_query: Option<Box<dyn RegistryQuery>>,
+    notifier: Option<Box<dyn Notifier>>,
+    forge: Option<Box<dyn Forge>>,
+}
+
+impl ApiBuilder {
+    pub fn config(mut self, config: Config) -> Self {
+        self.config = Some(config);
+        self
+    }
+
+    pub fn engine(mut self, engine: Box<dyn PipelineRunner>) -> Self {
+        self.engine = Some(engine);
+        self
+    }
+
+    pub fn registry_query(mut self, query: Box<dyn RegistryQuery>) -> Self {
+        self.registry_query = Some(query);
+        self
+    }
+
+    pub fn notifier(mut self, notifier: Box<dyn Notifier>) -> Self {
+        self.notifier = Some(notifier);
+        self
+    }
+
+    pub fn forge(mut self, forge: Box<dyn Forge>) -> Self {
+        self.forge = Some(forge);
+        self
+    }
+
+    pub fn build(self) -> Result<Api> {
+        Ok(Api {
+            config: self
+                .config
+                .ok_or_else(|| anyhow::anyhow!("config required"))?,
+            engine: self
+                .engine
+                .ok_or_else(|| anyhow::anyhow!("engine required"))?,
+            registry_query: self
+                .registry_query
+                .ok_or_else(|| anyhow::anyhow!("registry_query required"))?,
+            notifier: self
+                .notifier
+                .ok_or_else(|| anyhow::anyhow!("notifier required"))?,
+            forge: self.forge.unwrap_or_else(|| Box::new(NoopForge)),
+        })
+    }
+}
+
 
 impl Api {
     /// Build with default adapters (CargoPublisher, GiteaRegistry,
@@ -60,6 +116,7 @@ impl Api {
                 CargoTokenResolver::new(),
             ))),
             notifier: Box::new(infra::notify::NoopNotifier),
+            forge: Box::new(NoopForge),
         })
     }
 
@@ -79,8 +136,21 @@ impl Api {
                 CargoTokenResolver::new(),
             ))),
             notifier: Box::new(infra::notify::SpawnNotifier { command }),
+            forge: Box::new(NoopForge),
         })
     }
+
+    /// Return a builder for full dependency injection.
+    pub fn builder() -> ApiBuilder {
+        ApiBuilder {
+            config: None,
+            engine: None,
+            registry_query: None,
+            notifier: None,
+            forge: None,
+        }
+    }
+
 
     /// Access the loaded configuration.
     pub fn config(&self) -> &Config {
@@ -342,6 +412,17 @@ impl Api {
         let ticket = Deferral::ticket_id(&krate.name);
         let now = chrono::Local::now();
 
+        let pr_number = match self.forge.create_pr(
+            &format!("promote: {} v{} {} -> {}", krate.name, krate.version, from, to_stage.registry.name),
+            &format!("Deferred promotion ticket: {ticket}"),
+            from,
+            &to_stage.registry.name,
+        ) {
+            Ok(0) => None, // NoopForge returns 0
+            Ok(n) => Some(n),
+            Err(_) => None, // Best-effort; don't fail defer on forge error
+        };
+
         let deferral = Deferral {
             ticket: ticket.clone(),
             crate_name: krate.name.clone(),
@@ -354,6 +435,7 @@ impl Api {
             source_hash,
             command: vec![],
             reason: String::new(),
+            pr_number,
         };
 
         deferral.write(repo_root)?;
@@ -396,6 +478,17 @@ impl Api {
         let ticket = Deferral::ticket_id(&krate.name);
         let now = chrono::Local::now();
 
+        let pr_number = match self.forge.create_pr(
+            &format!("promote: {} v{} branch {} -> {}", krate.name, krate.version, from, to_stage),
+            &format!("Deferred branch promotion ticket: {ticket}"),
+            from,
+            to_stage,
+        ) {
+            Ok(0) => None,
+            Ok(n) => Some(n),
+            Err(_) => None,
+        };
+
         let deferral = Deferral {
             ticket,
             crate_name: krate.name.clone(),
@@ -408,6 +501,7 @@ impl Api {
             source_hash: lock.source_hash.clone(),
             command: vec![],
             reason: String::new(),
+            pr_number,
         };
 
         deferral.write(repo_root)?;
@@ -456,6 +550,12 @@ impl Api {
                 "=> branch merge complete: '{}' -> '{}'",
                 d.from_stage, d.to_stage,
             );
+        }
+
+        // Close associated PR if one exists (best-effort).
+        if let Some(pr) = d.pr_number {
+            let _ = self.forge.comment_pr(pr, &format!("Confirmed: {reason}"));
+            let _ = self.forge.close_pr(pr);
         }
 
         // Status update happens after side effects succeed.

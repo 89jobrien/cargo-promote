@@ -19,6 +19,8 @@ struct ConfigFile {
     autobump: Option<String>,
     #[serde(default)]
     packages: HashMap<String, PackageOverrideDef>,
+    #[serde(default)]
+    forge: Option<ForgeConfigDef>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -48,6 +50,27 @@ struct PipelineDef {
     stages: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ForgeConfigDef {
+    #[serde(rename = "type")]
+    forge_type: String,
+    url: String,
+    owner: String,
+    repo: String,
+    #[serde(default)]
+    token_env: Option<String>,
+}
+
+/// Configuration for a code forge (Gitea, GitHub, etc.).
+#[derive(Debug, Clone)]
+pub struct ForgeConfig {
+    pub forge_type: String,
+    pub url: String,
+    pub owner: String,
+    pub repo: String,
+    pub token_env: Option<String>,
+}
+
 /// Configuration for a branch-based promotion pipeline.
 #[derive(Debug, Clone)]
 pub struct BranchPipelineConfig {
@@ -63,6 +86,7 @@ pub struct Config {
     pub branch_pipeline: Option<BranchPipelineConfig>,
     pub autobump: Option<BumpLevel>,
     pub packages: HashMap<String, PackageOverride>,
+    pub forge: Option<ForgeConfig>,
 }
 
 /// A `[registries.<name>]` entry in `.cargo/config.toml`.
@@ -238,12 +262,21 @@ impl Config {
             })
             .collect::<Result<HashMap<_, _>>>()?;
 
+        let forge = file.forge.map(|def| ForgeConfig {
+            forge_type: def.forge_type,
+            url: def.url,
+            owner: def.owner,
+            repo: def.repo,
+            token_env: def.token_env,
+        });
+
         Ok(Self {
             registries,
             pipelines,
             branch_pipeline,
             autobump,
             packages,
+            forge,
         })
     }
 
@@ -300,6 +333,7 @@ impl Config {
             branch_pipeline: None,
             autobump: None,
             packages: HashMap::new(),
+            forge: None,
         }
     }
 
@@ -379,6 +413,31 @@ stages = ["nonexistent"]
             msg.contains("nonexistent"),
             "error should name the registry: {msg}"
         );
+    }
+
+    #[test]
+    fn forge_config_parses_from_toml() {
+        let toml = r#"
+[forge]
+type = "gitea"
+url = "http://localhost:3000"
+owner = "joe"
+repo = "cargo-promote"
+token_env = "GITEA_TOKEN"
+"#;
+        let cfg = Config::from_toml(toml).expect("should parse");
+        let forge = cfg.forge.expect("forge should be Some");
+        assert_eq!(forge.forge_type, "gitea");
+        assert_eq!(forge.url, "http://localhost:3000");
+        assert_eq!(forge.owner, "joe");
+        assert_eq!(forge.repo, "cargo-promote");
+        assert_eq!(forge.token_env.as_deref(), Some("GITEA_TOKEN"));
+    }
+
+    #[test]
+    fn missing_forge_section_is_valid() {
+        let cfg = Config::from_toml("").expect("empty config should parse");
+        assert!(cfg.forge.is_none());
     }
 
     #[test]
