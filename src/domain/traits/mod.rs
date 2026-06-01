@@ -113,12 +113,7 @@ pub trait Notifier {
 /// Port: interact with a code forge (Gitea, GitHub, etc.).
 pub trait Forge {
     /// Create a release on the forge.
-    fn create_release(
-        &self,
-        tag: &str,
-        name: &str,
-        body: &str,
-    ) -> Result<(), PromoteError>;
+    fn create_release(&self, tag: &str, name: &str, body: &str) -> Result<(), PromoteError>;
 
     /// Create a pull request. Returns the PR number.
     fn create_pr(
@@ -140,12 +135,7 @@ pub trait Forge {
 pub struct NoopForge;
 
 impl Forge for NoopForge {
-    fn create_release(
-        &self,
-        _tag: &str,
-        _name: &str,
-        _body: &str,
-    ) -> Result<(), PromoteError> {
+    fn create_release(&self, _tag: &str, _name: &str, _body: &str) -> Result<(), PromoteError> {
         Ok(())
     }
 
@@ -175,7 +165,11 @@ mod tests {
     #[test]
     fn noop_forge_create_release_returns_ok() {
         let forge = NoopForge;
-        assert!(forge.create_release("v0.1.0", "Release 0.1.0", "body").is_ok());
+        assert!(
+            forge
+                .create_release("v0.1.0", "Release 0.1.0", "body")
+                .is_ok()
+        );
     }
 
     #[test]

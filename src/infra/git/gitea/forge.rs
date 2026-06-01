@@ -1,7 +1,7 @@
 use secrecy::{ExposeSecret, SecretString};
 
-use crate::domain::traits::Forge;
 use crate::domain::PromoteError;
+use crate::domain::traits::Forge;
 
 /// Adapter: Gitea forge operations via its REST API.
 pub struct GiteaForge {
@@ -34,12 +34,7 @@ impl GiteaForge {
 }
 
 impl Forge for GiteaForge {
-    fn create_release(
-        &self,
-        tag: &str,
-        name: &str,
-        body: &str,
-    ) -> Result<(), PromoteError> {
+    fn create_release(&self, tag: &str, name: &str, body: &str) -> Result<(), PromoteError> {
         let url = format!("{}/releases", self.api_base());
         let payload = serde_json::json!({
             "tag_name": tag,

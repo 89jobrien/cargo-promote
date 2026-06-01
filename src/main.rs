@@ -275,7 +275,12 @@ fn main() -> Result<()> {
             let skip_list: Vec<&str> = skip.split(',').map(|s| s.trim()).collect();
 
             let result = api.publish_all(
-                &root, allow_dirty, dry_run, force, registry.as_deref(), &skip_list,
+                &root,
+                allow_dirty,
+                dry_run,
+                force,
+                registry.as_deref(),
+                &skip_list,
             )?;
 
             eprintln!(

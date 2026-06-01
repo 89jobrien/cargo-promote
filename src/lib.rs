@@ -97,7 +97,6 @@ impl ApiBuilder {
     }
 }
 
-
 impl Api {
     /// Build with default adapters (CargoPublisher, GiteaRegistry,
     /// NoopNotifier) and auto-accepting confirmer.
@@ -150,7 +149,6 @@ impl Api {
             forge: None,
         }
     }
-
 
     /// Access the loaded configuration.
     pub fn config(&self) -> &Config {
@@ -413,7 +411,10 @@ impl Api {
         let now = chrono::Local::now();
 
         let pr_number = match self.forge.create_pr(
-            &format!("promote: {} v{} {} -> {}", krate.name, krate.version, from, to_stage.registry.name),
+            &format!(
+                "promote: {} v{} {} -> {}",
+                krate.name, krate.version, from, to_stage.registry.name
+            ),
             &format!("Deferred promotion ticket: {ticket}"),
             from,
             &to_stage.registry.name,
@@ -479,7 +480,10 @@ impl Api {
         let now = chrono::Local::now();
 
         let pr_number = match self.forge.create_pr(
-            &format!("promote: {} v{} branch {} -> {}", krate.name, krate.version, from, to_stage),
+            &format!(
+                "promote: {} v{} branch {} -> {}",
+                krate.name, krate.version, from, to_stage
+            ),
             &format!("Deferred branch promotion ticket: {ticket}"),
             from,
             to_stage,
@@ -592,4 +596,3 @@ pub struct PublishAllResult {
     /// Names of crates blocked by path-only dependencies.
     pub blocked: Vec<String>,
 }
-

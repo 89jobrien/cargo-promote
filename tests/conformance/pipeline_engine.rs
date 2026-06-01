@@ -4,7 +4,9 @@
 
 use cargo_promote::domain::pipeline::PipelineEngine;
 use cargo_promote::domain::traits::{Publisher, RegistryQuery};
-use cargo_promote::domain::{CrateInfo, CrateRef, Pipeline, PromoteError, PublishOpts, Registry, Stage};
+use cargo_promote::domain::{
+    CrateInfo, CrateRef, Pipeline, PromoteError, PublishOpts, Registry, Stage,
+};
 use std::cell::RefCell;
 use std::path::PathBuf;
 

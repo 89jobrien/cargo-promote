@@ -14,7 +14,6 @@ pub enum DeferralStatus {
     Rejected,
 }
 
-
 /// What kind of promotion is being deferred.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

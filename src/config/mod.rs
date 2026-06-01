@@ -248,9 +248,7 @@ impl Config {
                     .as_deref()
                     .map(|s| s.parse::<BumpLevel>())
                     .transpose()
-                    .with_context(|| {
-                        format!("invalid autobump for package '{name}'")
-                    })?;
+                    .with_context(|| format!("invalid autobump for package '{name}'"))?;
                 Ok((
                     name,
                     PackageOverride {
@@ -537,7 +535,9 @@ pipeline = "staging-only"
 publish = false
 "#;
         let cfg = Config::from_toml(toml).expect("should parse");
-        let ov = cfg.package_override("foo").expect("foo override should exist");
+        let ov = cfg
+            .package_override("foo")
+            .expect("foo override should exist");
         assert_eq!(ov.autobump, Some(BumpLevel::Minor));
         assert_eq!(ov.pipeline.as_deref(), Some("staging-only"));
         assert_eq!(ov.publish, Some(false));
