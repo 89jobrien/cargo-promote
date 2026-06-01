@@ -168,10 +168,9 @@ impl BranchPipeline {
         })?;
 
         // Read and verify promote.lock
-        let lock = PromoteLock::read(repo_path).map_err(|e| PromoteError::Other(e))?;
+        let lock = PromoteLock::read(repo_path).map_err(PromoteError::Other)?;
 
-        lock.verify_hash(repo_path)
-            .map_err(|e| PromoteError::Other(e))?;
+        lock.verify_hash(repo_path).map_err(PromoteError::Other)?;
 
         eprintln!("=> hash verified, merging '{from_stage}' -> '{to_stage}'");
 

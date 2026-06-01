@@ -17,11 +17,6 @@ pub struct CrateNode {
     pub path_only_deps: Vec<String>,
 }
 
-// TODO(cargo-utils, #5): replace manual workspace member resolution with
-// cargo_metadata::MetadataCommand to handle glob patterns in
-// [workspace.members] and path canonicalization correctly.
-// Ref: release-plz/cargo_utils/src/workspace_members.rs
-
 /// Scan a directory tree for all Cargo.toml files and build a dep graph.
 pub fn scan_workspace_tree(root: &Path, skip: &[&str]) -> Result<Vec<CrateNode>> {
     let dirs = scannable_dirs(root, skip)?;
@@ -56,16 +51,29 @@ fn scannable_dirs(root: &Path, skip: &[&str]) -> Result<Vec<PathBuf>> {
     Ok(dirs)
 }
 
-/// Expand workspace members into individual manifest paths.
+/// Expand workspace members into individual manifest paths using `cargo_metadata`.
 fn resolve_all_manifests(dirs: &[PathBuf]) -> Vec<PathBuf> {
     dirs.iter()
-        .flat_map(|dir| {
-            let manifest = dir.join("Cargo.toml");
-            parse_manifest(&manifest)
-                .map(|doc| manifest_paths(&doc, dir))
-                .unwrap_or_default()
-        })
+        .flat_map(|dir| resolve_manifests_via_metadata(dir))
         .collect()
+}
+
+/// Use `cargo_metadata` to discover workspace member manifest paths.
+/// Falls back to the root `Cargo.toml` if metadata resolution fails (single crate).
+fn resolve_manifests_via_metadata(dir: &Path) -> Vec<PathBuf> {
+    let manifest_path = dir.join("Cargo.toml");
+    match cargo_metadata::MetadataCommand::new()
+        .no_deps()
+        .manifest_path(&manifest_path)
+        .exec()
+    {
+        Ok(metadata) => metadata
+            .packages
+            .iter()
+            .map(|p| p.manifest_path.clone().into_std_path_buf())
+            .collect(),
+        Err(_) => vec![manifest_path],
+    }
 }
 
 fn collect_crate_names(manifests: &[PathBuf]) -> HashSet<String> {
@@ -73,23 +81,6 @@ fn collect_crate_names(manifests: &[PathBuf]) -> HashSet<String> {
         .iter()
         .filter_map(|m| read_crate_name(m))
         .collect()
-}
-
-/// Return manifest paths for workspace members, or the root manifest itself.
-fn manifest_paths(doc: &toml::Value, dir: &Path) -> Vec<PathBuf> {
-    if let Some(members) = doc
-        .get("workspace")
-        .and_then(|w| w.get("members"))
-        .and_then(|m| m.as_array())
-    {
-        members
-            .iter()
-            .filter_map(|v| v.as_str())
-            .map(|m| dir.join(m).join("Cargo.toml"))
-            .collect()
-    } else {
-        vec![dir.join("Cargo.toml")]
-    }
 }
 
 fn parse_manifest(path: &Path) -> Option<toml::Value> {

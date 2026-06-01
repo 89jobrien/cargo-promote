@@ -17,6 +17,7 @@ serde_yaml = "0.9"
 semver = "1"
 sha2 = "0.10"
 thiserror = "2"
+cargo_metadata = "0.18"
 toml = "0.8"
 toml_edit = "0.22"
 
