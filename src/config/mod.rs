@@ -130,7 +130,7 @@ impl Config {
         })
     }
 
-    // TODO(cargo-utils): auto-discover registries from .cargo/config.toml
+    // TODO(cargo-utils, #2): auto-discover registries from .cargo/config.toml
     // hierarchy when promote.toml doesn't define them. Walk ancestor dirs
     // + $CARGO_HOME, follow source-replacement chains.
     // Ref: release-plz/cargo_utils/src/registry.rs

@@ -17,7 +17,7 @@ pub struct CrateNode {
     pub path_only_deps: Vec<String>,
 }
 
-// TODO(cargo-utils): replace manual workspace member resolution with
+// TODO(cargo-utils, #5): replace manual workspace member resolution with
 // cargo_metadata::MetadataCommand to handle glob patterns in
 // [workspace.members] and path canonicalization correctly.
 // Ref: release-plz/cargo_utils/src/workspace_members.rs

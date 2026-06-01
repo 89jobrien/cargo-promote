@@ -52,7 +52,7 @@ pub fn bump_version(version: &Version, level: BumpLevel) -> Version {
     v
 }
 
-// TODO(cargo-utils): replace manual TOML version editing with a LocalManifest
+// TODO(cargo-utils, #3): replace manual TOML version editing with a LocalManifest
 // struct (toml_edit-based). Add support for workspace-inherited versions by
 // detecting version.workspace=true and bumping the workspace root instead.
 // Ref: release-plz/cargo_utils/src/local_manifest.rs
