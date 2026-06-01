@@ -89,6 +89,11 @@ pub trait PipelineRunner {
     ) -> Result<(), PromoteError>;
 }
 
+/// Port: resolve authentication tokens for registries.
+pub trait TokenResolver {
+    fn resolve(&self, registry_name: &str) -> Result<Option<secrecy::SecretString>, PromoteError>;
+}
+
 /// Port: notify external systems about promotion events.
 pub trait Notifier {
     fn on_deferred(&self, deferral: &Deferral) -> Result<(), PromoteError>;

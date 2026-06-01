@@ -17,6 +17,7 @@ use domain::version;
 use domain::{CrateInfo, CrateRef, Pipeline, PublishOpts, Stage};
 use infra::cargo::CargoPublisher;
 use infra::git::gitea::GiteaRegistry;
+use infra::token::CargoTokenResolver;
 
 /// If autobump is configured, bump the manifest version and return an
 /// updated CrateRef.
@@ -101,7 +102,9 @@ impl Api {
         Ok(Self {
             config,
             engine: Box::new(engine),
-            registry_query: Box::new(GiteaRegistry),
+            registry_query: Box::new(GiteaRegistry::new(std::sync::Arc::new(
+                CargoTokenResolver::new(),
+            ))),
             notifier: Box::new(infra::notify::NoopNotifier),
         })
     }
@@ -118,7 +121,9 @@ impl Api {
         Ok(Self {
             config,
             engine: Box::new(engine),
-            registry_query: Box::new(GiteaRegistry),
+            registry_query: Box::new(GiteaRegistry::new(std::sync::Arc::new(
+                CargoTokenResolver::new(),
+            ))),
             notifier: Box::new(infra::notify::SpawnNotifier { command }),
         })
     }
