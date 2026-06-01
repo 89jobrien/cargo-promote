@@ -15,9 +15,14 @@ impl Publisher for CargoPublisher {
         let mut cmd = Command::new("cargo");
         cmd.arg("publish");
 
-        if let Some(ref cargo_name) = registry.cargo_name {
-            cmd.arg("--registry").arg(cargo_name);
-        }
+        // Use explicit cargo_name if set, otherwise fall back to the
+        // registry name itself so we never rely on cargo's default
+        // registry setting.
+        let cargo_name = registry
+            .cargo_name
+            .as_deref()
+            .unwrap_or(&registry.name);
+        cmd.arg("--registry").arg(cargo_name);
 
         cmd.arg("--manifest-path").arg(&krate.manifest_path);
 
@@ -28,7 +33,7 @@ impl Publisher for CargoPublisher {
             cmd.arg("--dry-run");
         }
 
-        let label = registry.cargo_name.as_deref().unwrap_or("crates.io");
+        let label = cargo_name;
         if opts.dry_run {
             eprintln!("=> Dry run: would publish {} to {}", krate.name, label);
         } else {
