@@ -8,11 +8,7 @@ deferred promotions, and forge integration.
 ## Install
 
 ```bash
-cargo install cargo-promote
-# or from git
 cargo install --git https://github.com/89jobrien/cargo-promote
-# or from a local checkout
-cargo install --path .
 ```
 
 ## Commands
