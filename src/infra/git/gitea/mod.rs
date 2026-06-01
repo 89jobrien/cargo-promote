@@ -18,6 +18,43 @@ impl GiteaRegistry {
 }
 
 impl RegistryQuery for GiteaRegistry {
+    fn crate_exists(
+        &self,
+        registry: &Registry,
+        name: &str,
+        version: &str,
+    ) -> Result<bool, PromoteError> {
+        let api_url = registry
+            .api_url
+            .as_deref()
+            .ok_or_else(|| PromoteError::QueryFailed {
+                registry: registry.name.clone(),
+                reason: "no api_url configured".to_string(),
+            })?;
+
+        let url = format!("{api_url}/api/packages/joe/cargo/{name}/{version}");
+
+        let token = self.token_resolver.resolve(&registry.name)?;
+
+        let mut cmd = Command::new("curl");
+        cmd.args(["-sf", "-o", "/dev/null", "-w", "%{http_code}"]);
+
+        if let Some(ref secret) = token {
+            let header = format!("Authorization: Bearer {}", secret.expose_secret());
+            cmd.args(["-H", &header]);
+        }
+
+        cmd.arg(&url);
+
+        let output = cmd.output().map_err(|e| PromoteError::QueryFailed {
+            registry: registry.name.clone(),
+            reason: format!("failed to run curl: {e}"),
+        })?;
+
+        let status_code = String::from_utf8_lossy(&output.stdout);
+        Ok(status_code.trim() == "200")
+    }
+
     fn list_crates(&self, registry: &Registry) -> Result<Vec<CrateInfo>, PromoteError> {
         let api_url = registry
             .api_url

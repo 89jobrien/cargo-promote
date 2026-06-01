@@ -1,16 +1,32 @@
-use super::traits::{PipelineRunner, Publisher};
+use super::traits::{PipelineRunner, Publisher, RegistryQuery};
 use super::{CrateRef, Pipeline, PromoteError, PublishOpts, Stage};
 
 /// Drives a crate through pipeline stages.
-pub struct PipelineEngine<P: Publisher> {
+pub struct PipelineEngine<P: Publisher, Q: RegistryQuery> {
     publisher: P,
+    registry_query: Q,
     confirmer: Box<dyn Fn(&str) -> bool>,
 }
 
-impl<P: Publisher> PipelineEngine<P> {
+impl<P: Publisher> PipelineEngine<P, NullRegistryQuery> {
     pub fn new(publisher: P, confirmer: impl Fn(&str) -> bool + 'static) -> Self {
         Self {
             publisher,
+            registry_query: NullRegistryQuery,
+            confirmer: Box::new(confirmer),
+        }
+    }
+}
+
+impl<P: Publisher, Q: RegistryQuery> PipelineEngine<P, Q> {
+    pub fn with_query(
+        publisher: P,
+        registry_query: Q,
+        confirmer: impl Fn(&str) -> bool + 'static,
+    ) -> Self {
+        Self {
+            publisher,
+            registry_query,
             confirmer: Box::new(confirmer),
         }
     }
@@ -22,6 +38,20 @@ impl<P: Publisher> PipelineEngine<P> {
         stage: &Stage,
         opts: &PublishOpts,
     ) -> Result<(), PromoteError> {
+        // Skip-if-already-published guard
+        if !opts.force {
+            if let Ok(true) =
+                self.registry_query
+                    .crate_exists(&stage.registry, &krate.name, &krate.version)
+            {
+                eprintln!(
+                    "=> {} v{} already exists in '{}', skipping (use --force to override)",
+                    krate.name, krate.version, stage.registry.name
+                );
+                return Ok(());
+            }
+        }
+
         if stage.registry.confirm && !opts.skip_confirm && !opts.dry_run {
             let prompt = format!(
                 "About to publish {} v{} to '{}'. Continue?",
@@ -76,7 +106,7 @@ impl<P: Publisher> PipelineEngine<P> {
     }
 }
 
-impl<P: Publisher> PipelineRunner for PipelineEngine<P> {
+impl<P: Publisher, Q: RegistryQuery> PipelineRunner for PipelineEngine<P, Q> {
     fn run_stage(
         &self,
         krate: &CrateRef,
@@ -103,6 +133,19 @@ impl<P: Publisher> PipelineRunner for PipelineEngine<P> {
         opts: &PublishOpts,
     ) -> Result<(), PromoteError> {
         PipelineEngine::promote_next(self, krate, pipeline, current_stage, opts)
+    }
+}
+
+/// A no-op registry query that always returns `false` for `crate_exists`.
+pub struct NullRegistryQuery;
+
+impl RegistryQuery for NullRegistryQuery {
+    fn list_crates(
+        &self,
+        registry: &super::Registry,
+    ) -> Result<Vec<super::CrateInfo>, PromoteError> {
+        let _ = registry;
+        Ok(vec![])
     }
 }
 

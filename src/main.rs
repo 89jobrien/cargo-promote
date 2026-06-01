@@ -28,6 +28,9 @@ enum Cmd {
         pipeline: Option<String>,
         #[arg(long)]
         registry: Option<String>,
+        /// Publish even if the version already exists in the registry
+        #[arg(long)]
+        force: bool,
     },
 
     /// Promote a crate from one pipeline stage to the next
@@ -58,6 +61,9 @@ enum Cmd {
         yes: bool,
         #[arg(long)]
         pipeline: Option<String>,
+        /// Publish even if versions already exist in registries
+        #[arg(long)]
+        force: bool,
     },
 
     /// List crates in a registry
@@ -96,6 +102,10 @@ enum Cmd {
             default_value = "maestro,maestro-feat-minibox-provider,maestro-slides,seaography,langchainx,prusti-dev,hyperdocker-main,sandbox"
         )]
         skip: String,
+
+        /// Publish even if versions already exist in registries
+        #[arg(long)]
+        force: bool,
     },
 
     /// Bump version and create promote.lock
@@ -182,6 +192,7 @@ fn main() -> Result<()> {
             allow_dirty,
             pipeline,
             registry,
+            force,
         } => {
             let dir = path.as_deref().unwrap_or(&cwd);
             let api = Api::with_confirmer(dir, interactive_confirmer)?;
@@ -189,6 +200,7 @@ fn main() -> Result<()> {
                 path.as_deref(),
                 package.as_deref(),
                 allow_dirty,
+                force,
                 pipeline.as_deref(),
                 registry.as_deref(),
             )
@@ -220,6 +232,7 @@ fn main() -> Result<()> {
             allow_dirty,
             yes,
             pipeline,
+            force,
         } => {
             let dir = path.as_deref().unwrap_or(&cwd);
             let api = Api::with_confirmer(dir, interactive_confirmer)?;
@@ -228,6 +241,7 @@ fn main() -> Result<()> {
                 package.as_deref(),
                 allow_dirty,
                 yes,
+                force,
                 pipeline.as_deref(),
             )
         }
@@ -252,6 +266,7 @@ fn main() -> Result<()> {
             dry_run,
             registry,
             skip,
+            force,
         } => {
             let api = Api::with_confirmer(&cwd, interactive_confirmer)?;
             let root = path.unwrap_or_else(|| {
@@ -259,8 +274,9 @@ fn main() -> Result<()> {
             });
             let skip_list: Vec<&str> = skip.split(',').map(|s| s.trim()).collect();
 
-            let result =
-                api.publish_all(&root, allow_dirty, dry_run, registry.as_deref(), &skip_list)?;
+            let result = api.publish_all(
+                &root, allow_dirty, dry_run, force, registry.as_deref(), &skip_list,
+            )?;
 
             eprintln!(
                 "=== PUBLISH ORDER ({} crates) ===",

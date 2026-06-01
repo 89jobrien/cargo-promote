@@ -102,6 +102,7 @@ impl Api {
         path: Option<&Path>,
         package: Option<&str>,
         allow_dirty: bool,
+        force: bool,
         pipeline: Option<&str>,
         registry: Option<&str>,
     ) -> Result<()> {
@@ -109,6 +110,7 @@ impl Api {
         let krate = maybe_autobump(krate, &self.config)?;
         let opts = PublishOpts {
             allow_dirty,
+            force,
             ..Default::default()
         };
 
@@ -158,6 +160,7 @@ impl Api {
         package: Option<&str>,
         allow_dirty: bool,
         yes: bool,
+        force: bool,
         pipeline: Option<&str>,
     ) -> Result<()> {
         let krate = manifest::resolve_crate(path, package)?;
@@ -165,6 +168,7 @@ impl Api {
         let opts = PublishOpts {
             allow_dirty,
             skip_confirm: yes,
+            force,
             ..Default::default()
         };
         let pl = self.resolve_pipeline(pipeline)?;
@@ -194,6 +198,7 @@ impl Api {
         root: &Path,
         allow_dirty: bool,
         dry_run: bool,
+        force: bool,
         registry: Option<&str>,
         skip: &[&str],
     ) -> Result<PublishAllResult> {
@@ -247,6 +252,7 @@ impl Api {
         let opts = PublishOpts {
             allow_dirty,
             skip_confirm: true,
+            force,
             ..Default::default()
         };
 
