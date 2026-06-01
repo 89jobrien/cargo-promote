@@ -1,3 +1,5 @@
+pub mod forge;
+
 use std::sync::Arc;
 
 use secrecy::ExposeSecret;

@@ -43,6 +43,8 @@ pub struct Deferral {
     pub command: Vec<String>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr_number: Option<u64>,
 }
 
 impl Deferral {
@@ -155,7 +157,41 @@ mod tests {
             source_hash: "sha256:abc123".to_string(),
             command: vec![],
             reason: String::new(),
+            pr_number: None,
         }
+    }
+
+    #[test]
+    fn pr_number_round_trips() {
+        let dir = TempDir::new().unwrap();
+        let mut d = sample_deferral();
+        d.pr_number = Some(42);
+        d.write(dir.path()).unwrap();
+
+        let loaded = Deferral::read(dir.path(), &d.ticket).unwrap();
+        assert_eq!(loaded.pr_number, Some(42));
+    }
+
+    #[test]
+    fn pr_number_defaults_to_none_when_missing() {
+        let dir = TempDir::new().unwrap();
+        let deferrals_dir = dir.path().join(".promote/deferrals");
+        fs::create_dir_all(&deferrals_dir).unwrap();
+
+        let content = r#"
+ticket = "d-20260531.185400-noprt"
+crate_name = "noprt"
+version = "0.1.0"
+from_stage = "cratebox"
+to_stage = "crates-io"
+status = "pending"
+deferred_at = "20260531.185400"
+source_hash = "sha256:abc123"
+"#;
+        fs::write(deferrals_dir.join("d-20260531.185400-noprt.toml"), content).unwrap();
+
+        let d = Deferral::read(dir.path(), "d-20260531.185400-noprt").unwrap();
+        assert_eq!(d.pr_number, None);
     }
 
     #[test]

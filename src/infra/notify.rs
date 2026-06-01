@@ -54,6 +54,7 @@ mod tests {
             source_hash: "sha256:abc".to_string(),
             command: vec![],
             reason: String::new(),
+            pr_number: None,
         }
     }
 
