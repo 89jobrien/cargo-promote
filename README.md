@@ -1,7 +1,7 @@
 # cargo-promote
 
 Crate publishing and promotion pipeline for Rust projects.
-Publishes to private registries (Gitea/cratebox) and optionally
+Publishes to private registries (Gitea, GitHub) and optionally
 crates.io, with configurable pipelines, per-package overrides,
 deferred promotions, and forge integration.
 
@@ -23,7 +23,7 @@ cargo-promote publish
 cargo-promote publish -p my-crate
 
 # Publish to a named registry directly
-cargo-promote publish --registry cratebox
+cargo-promote publish --registry my-registry
 
 # Select a named pipeline
 cargo-promote publish --pipeline staging-only
@@ -40,17 +40,17 @@ cargo-promote ship -p my-crate -y --force
 # Publish all crates under a directory in dependency order
 cargo-promote publish-all --path ~/dev --dry-run
 cargo-promote publish-all --force --skip "sandbox,experiments"
-cargo-promote publish-all --registry cratebox --allow-dirty
+cargo-promote publish-all --registry my-registry --allow-dirty
 ```
 
 ### Promotion
 
 ```bash
 # Promote from one pipeline stage to the next
-cargo-promote promote -p my-crate --from cratebox
+cargo-promote promote -p my-crate --from my-registry
 
 # Promote with auto-confirm and dry-run
-cargo-promote promote -p my-crate --from cratebox -y --dry-run
+cargo-promote promote -p my-crate --from my-registry -y --dry-run
 
 # Bump version and create promote.lock
 cargo-promote bump
@@ -65,13 +65,13 @@ Defer a promotion for later confirmation (e.g. after manual QA):
 
 ```bash
 # Defer a registry promotion
-cargo-promote defer --from cratebox
+cargo-promote defer --from my-registry
 
 # Defer a branch promotion
 cargo-promote defer --branch --from develop
 
 # Defer with a notification command
-cargo-promote defer --from cratebox --command notify-send "promotion deferred"
+cargo-promote defer --from my-registry --command notify-send "promotion deferred"
 
 # Confirm or reject a pending deferral
 cargo-promote confirm <ticket>
@@ -102,16 +102,26 @@ Place a `promote.toml` in your crate or workspace root:
 # Automatically bump version before publishing (patch | minor | major)
 autobump = "patch"
 
-[registries.cratebox]
-cargo_name = "cratebox"
-api_url = "http://100.105.75.7:3000/api/packages/joe/cargo"
+[registries.my-registry]
+cargo_name = "my-registry"       # name in ~/.cargo/config.toml
+api_url = "http://<host>/api/packages/<user>/cargo"
 
 [registries.crates-io]
-confirm = true                  # prompt before publishing
+confirm = true                   # prompt before publishing
 
 [pipelines.default]
-stages = ["cratebox", "crates-io"]
+stages = ["my-registry", "crates-io"]
 ```
+
+### Registry Options
+
+Each `[registries.<name>]` entry supports:
+
+| Field        | Description                                      |
+| ------------ | ------------------------------------------------ |
+| `cargo_name` | Name as known to `cargo publish --registry`      |
+| `api_url`    | HTTP API URL for querying crate listings          |
+| `confirm`    | Prompt for confirmation before publishing (bool) |
 
 ### Per-Package Overrides
 
@@ -137,10 +147,10 @@ forge, and `confirm` comments and closes it automatically. The
 
 ```toml
 [forge]
-type = "gitea"
-url = "http://localhost:3000"
-owner = "joe"
-repo = "my-project"
+type = "gitea"                   # "gitea" or "github"
+url = "https://gitea.example.com"
+owner = "your-org"
+repo = "your-project"
 token_env = "GITEA_TOKEN"       # env var holding the API token
 ```
 
@@ -155,8 +165,9 @@ autobump = "patch"
 stages = ["develop", "staging", "production"]
 release_branch = "production"   # default: last stage
 
-[registries.cratebox]
-cargo_name = "cratebox"
+[registries.my-registry]
+cargo_name = "my-registry"
+api_url = "http://<host>/api/packages/<user>/cargo"
 ```
 
 The pipeline works as a CI chain:
@@ -201,20 +212,20 @@ adapters:
 
 ## Cargo Registry Setup
 
-Add cratebox to `~/.cargo/config.toml`:
+Register your private registry in `~/.cargo/config.toml`:
 
 ```toml
-[registries.cratebox]
-index = "sparse+http://<your-host>/api/packages/<user>/cargo/"
+[registries.my-registry]
+index = "sparse+http://<host>/api/packages/<user>/cargo/"
 
 [registry]
-default = "cratebox"
+default = "my-registry"
 ```
 
 Add your token to `~/.cargo/credentials.toml`:
 
 ```toml
-[registries.cratebox]
+[registries.my-registry]
 token = "Bearer <your-token>"
 ```
 
@@ -222,11 +233,14 @@ token = "Bearer <your-token>"
 
 Without a `promote.toml`, cargo-promote uses built-in defaults:
 
-- Registry: cratebox at
-  `http://100.105.75.7:3000/api/packages/joe/cargo` (override with
-  `REGISTRY_URL` and `REGISTRY_USER` env vars)
+- Registry: a single registry named `cratebox` (override the URL
+  and owner with `REGISTRY_URL` and `REGISTRY_USER` env vars)
 - Pipeline: cratebox -> crates-io (crates-io requires confirmation)
-- `publish-all` skips a default set of repos (maestro, sandbox, etc.)
+- `publish-all` skips a built-in set of repo names (override with
+  `--skip`)
+
+For any real use, create a `promote.toml` to define your own
+registries and pipelines.
 
 ## Build
 

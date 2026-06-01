@@ -19,6 +19,18 @@ impl GiteaRegistry {
     }
 }
 
+impl GiteaRegistry {
+    /// Build an Authorization header, handling tokens that already
+    /// include the `Bearer ` prefix (as stored in credentials.toml).
+    fn auth_header(token: &str) -> String {
+        if token.starts_with("Bearer ") || token.starts_with("bearer ") {
+            format!("Authorization: {token}")
+        } else {
+            format!("Authorization: Bearer {token}")
+        }
+    }
+}
+
 impl RegistryQuery for GiteaRegistry {
     fn crate_exists(
         &self,
@@ -34,7 +46,7 @@ impl RegistryQuery for GiteaRegistry {
                 reason: "no api_url configured".to_string(),
             })?;
 
-        let url = format!("{api_url}/api/packages/joe/cargo/{name}/{version}");
+        let url = format!("{api_url}/{name}/{version}");
 
         let token = self.token_resolver.resolve(&registry.name)?;
 
@@ -42,7 +54,7 @@ impl RegistryQuery for GiteaRegistry {
         cmd.args(["-sf", "-o", "/dev/null", "-w", "%{http_code}"]);
 
         if let Some(ref secret) = token {
-            let header = format!("Authorization: Bearer {}", secret.expose_secret());
+            let header = Self::auth_header(secret.expose_secret());
             cmd.args(["-H", &header]);
         }
 
@@ -66,6 +78,9 @@ impl RegistryQuery for GiteaRegistry {
                 reason: "no api_url configured".to_string(),
             })?;
 
+        // api_url includes the cargo index base, e.g.
+        // "http://host:port/api/packages/{owner}/cargo"
+        // The crates listing lives at {api_url}/api/v1/crates
         let url = format!("{api_url}/api/v1/crates");
 
         let token = self.token_resolver.resolve(&registry.name)?;
@@ -74,7 +89,7 @@ impl RegistryQuery for GiteaRegistry {
         cmd.args(["-sf"]);
 
         if let Some(ref secret) = token {
-            let header = format!("Authorization: Bearer {}", secret.expose_secret());
+            let header = Self::auth_header(secret.expose_secret());
             cmd.args(["-H", &header]);
         }
 
