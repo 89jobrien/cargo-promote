@@ -8,7 +8,7 @@ deferred promotions, and forge integration.
 ## Install
 
 ```bash
-cargo install --path .
+cargo install cargo-promote
 ```
 
 ## Commands
