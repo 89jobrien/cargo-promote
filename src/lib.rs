@@ -254,7 +254,8 @@ impl Api {
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("branch pipeline not configured in promote.toml"))?;
         let repo_path = path.unwrap_or(cwd);
-        domain::pipeline::BranchPipeline::bump(&krate, &branch_cfg.stages, repo_path)?;
+        let git = infra::git::local::LocalGit::new(repo_path.to_path_buf());
+        domain::pipeline::BranchPipeline::bump(&krate, &branch_cfg.stages, repo_path, &git)?;
         Ok(())
     }
 

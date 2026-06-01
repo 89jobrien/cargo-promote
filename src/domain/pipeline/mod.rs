@@ -115,23 +115,21 @@ impl BranchPipeline {
         krate: &CrateRef,
         stages: &[String],
         repo_path: &std::path::Path,
+        git: &crate::infra::git::local::LocalGit,
     ) -> Result<(), PromoteError> {
         use crate::domain::promote_lock::PromoteLock;
 
-        // Bump the version in Cargo.toml
         let (old_version, new_version) = crate::domain::version::bump_manifest_version(
             &krate.manifest_path,
             crate::domain::version::BumpLevel::Patch,
         )
-        .map_err(|e| PromoteError::Other(e))?;
+        .map_err(PromoteError::Other)?;
 
         eprintln!("=> bumped {} v{old_version} -> v{new_version}", krate.name);
 
-        // Compute source hash
         let source_hash =
-            PromoteLock::compute_source_hash(repo_path).map_err(|e| PromoteError::Other(e))?;
+            PromoteLock::compute_source_hash(repo_path).map_err(PromoteError::Other)?;
 
-        // Create and write promote.lock
         let entered_pipeline = stages.first().cloned().unwrap_or_default();
         let lock = PromoteLock {
             version: new_version.to_string(),
@@ -140,47 +138,11 @@ impl BranchPipeline {
             entered_pipeline,
         };
 
-        lock.write(repo_path).map_err(|e| PromoteError::Other(e))?;
+        lock.write(repo_path).map_err(PromoteError::Other)?;
 
-        // Stage and commit
-        use std::process::Command;
-        let status = Command::new("git")
-            .args(["add", "Cargo.toml", "promote.lock"])
-            .current_dir(repo_path)
-            .status()
-            .map_err(|e| PromoteError::Other(e.into()))?;
-
-        if !status.success() {
-            return Err(PromoteError::Other(anyhow::anyhow!(
-                "failed to stage Cargo.toml and promote.lock"
-            )));
-        }
-
-        let commit_msg = format!("bump: {} v{}", krate.name, new_version);
-        let status = Command::new("git")
-            .args(["commit", "-m", &commit_msg])
-            .current_dir(repo_path)
-            .status()
-            .map_err(|e| PromoteError::Other(e.into()))?;
-
-        if !status.success() {
-            return Err(PromoteError::Other(anyhow::anyhow!(
-                "failed to commit version bump"
-            )));
-        }
-
-        // Push
-        let status = Command::new("git")
-            .args(["push", "origin", "HEAD"])
-            .current_dir(repo_path)
-            .status()
-            .map_err(|e| PromoteError::Other(e.into()))?;
-
-        if !status.success() {
-            return Err(PromoteError::Other(anyhow::anyhow!(
-                "failed to push bumped version"
-            )));
-        }
+        git.stage(&["Cargo.toml", "promote.lock"])?;
+        git.commit(&format!("bump: {} v{}", krate.name, new_version))?;
+        git.push_head()?;
 
         Ok(())
     }
