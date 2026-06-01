@@ -1,3 +1,4 @@
+use super::deferral::Deferral;
 use super::{CrateInfo, CrateRef, Pipeline, PromoteError, PublishOpts, Registry, Stage};
 
 /// Port: publish a crate to a registry.
@@ -86,4 +87,9 @@ pub trait PipelineRunner {
         current_stage: &str,
         opts: &PublishOpts,
     ) -> Result<(), PromoteError>;
+}
+
+/// Port: notify external systems about promotion events.
+pub trait Notifier {
+    fn on_deferred(&self, deferral: &Deferral) -> Result<(), PromoteError>;
 }
