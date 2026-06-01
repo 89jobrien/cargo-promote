@@ -16,3 +16,10 @@ stages = ["develop", "staging", "production"]
 release_branch = "production"
 
 autobump = "patch"
+
+[forge]
+type = "github"
+url = "https://github.com"
+owner = "89jobrien"
+repo = "cargo-promote"
+token_env = "GITHUB_TOKEN"
