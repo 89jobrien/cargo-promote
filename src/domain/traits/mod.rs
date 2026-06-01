@@ -26,15 +26,14 @@ impl<T: Publisher> Publisher for &T {
 pub trait RegistryQuery {
     fn list_crates(&self, registry: &Registry) -> Result<Vec<CrateInfo>, PromoteError>;
 
-    /// Check if a specific crate@version already exists on the registry.
-    /// TODO(#6): implement in GiteaRegistry adapter
+    /// Check whether `name@version` already exists in the registry.
     fn crate_exists(
         &self,
-        _registry: &Registry,
-        _name: &str,
-        _version: &str,
+        registry: &Registry,
+        name: &str,
+        version: &str,
     ) -> Result<bool, PromoteError> {
-        // Default: assume not published (backwards-compatible).
+        let _ = (registry, name, version);
         Ok(false)
     }
 }

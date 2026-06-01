@@ -3,8 +3,8 @@
 //! Spec: E1-E7 from .ctx/conformance-spec.md
 
 use cargo_promote::domain::pipeline::PipelineEngine;
-use cargo_promote::domain::traits::Publisher;
-use cargo_promote::domain::{CrateRef, Pipeline, PromoteError, PublishOpts, Registry, Stage};
+use cargo_promote::domain::traits::{Publisher, RegistryQuery};
+use cargo_promote::domain::{CrateInfo, CrateRef, Pipeline, PromoteError, PublishOpts, Registry, Stage};
 use std::cell::RefCell;
 use std::path::PathBuf;
 
@@ -207,5 +207,93 @@ fn conformance_e7_promote_next_publishes_only_next() {
         pub_.published(),
         vec!["staging"],
         "E7: must publish only the next stage, not subsequent ones"
+    );
+}
+
+// --- Skip-if-already-published tests (S1-S3) ---
+
+struct StubRegistryQuery {
+    exists: bool,
+}
+
+impl RegistryQuery for StubRegistryQuery {
+    fn list_crates(&self, _registry: &Registry) -> Result<Vec<CrateInfo>, PromoteError> {
+        Ok(vec![])
+    }
+
+    fn crate_exists(
+        &self,
+        _registry: &Registry,
+        _name: &str,
+        _version: &str,
+    ) -> Result<bool, PromoteError> {
+        Ok(self.exists)
+    }
+}
+
+// S1: crate_exists=true -> publish is skipped
+#[test]
+fn conformance_s1_skip_when_already_published() {
+    let pub_ = RecordingPublisher::new();
+    let query = StubRegistryQuery { exists: true };
+    let engine = PipelineEngine::with_query(&pub_, query, |_| true);
+    let stage = Stage {
+        registry: reg("staging", false),
+    };
+
+    engine
+        .run_stage(&test_crate(), &stage, &skip_opts())
+        .expect("S1: should succeed (skip)");
+
+    assert!(
+        pub_.published().is_empty(),
+        "S1: publish must NOT be called when crate already exists"
+    );
+}
+
+// S2: crate_exists=true + force=true -> publish runs
+#[test]
+fn conformance_s2_force_overrides_skip() {
+    let pub_ = RecordingPublisher::new();
+    let query = StubRegistryQuery { exists: true };
+    let engine = PipelineEngine::with_query(&pub_, query, |_| true);
+    let stage = Stage {
+        registry: reg("staging", false),
+    };
+    let opts = PublishOpts {
+        force: true,
+        skip_confirm: true,
+        ..Default::default()
+    };
+
+    engine
+        .run_stage(&test_crate(), &stage, &opts)
+        .expect("S2: should succeed (force)");
+
+    assert_eq!(
+        pub_.published(),
+        vec!["staging"],
+        "S2: publish must be called when force=true even if crate exists"
+    );
+}
+
+// S3: crate_exists=false -> publish runs normally
+#[test]
+fn conformance_s3_publish_when_not_exists() {
+    let pub_ = RecordingPublisher::new();
+    let query = StubRegistryQuery { exists: false };
+    let engine = PipelineEngine::with_query(&pub_, query, |_| true);
+    let stage = Stage {
+        registry: reg("staging", false),
+    };
+
+    engine
+        .run_stage(&test_crate(), &stage, &skip_opts())
+        .expect("S3: should succeed");
+
+    assert_eq!(
+        pub_.published(),
+        vec!["staging"],
+        "S3: publish must be called when crate does not exist"
     );
 }

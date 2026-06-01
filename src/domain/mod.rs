@@ -59,7 +59,6 @@ pub struct PublishOpts {
     pub allow_dirty: bool,
     pub dry_run: bool,
     pub skip_confirm: bool,
-    /// TODO(#6): publish even if the version already exists on the registry.
     pub force: bool,
 }
 
