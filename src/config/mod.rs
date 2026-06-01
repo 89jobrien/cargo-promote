@@ -1,5 +1,5 @@
 use crate::domain::version::BumpLevel;
-use crate::domain::{Pipeline, Registry, Stage};
+use crate::domain::{PackageOverride, Pipeline, Registry, Stage};
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -17,6 +17,15 @@ struct ConfigFile {
     pipeline: Option<BranchPipelineDef>,
     #[serde(default)]
     autobump: Option<String>,
+    #[serde(default)]
+    packages: HashMap<String, PackageOverrideDef>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PackageOverrideDef {
+    autobump: Option<String>,
+    pipeline: Option<String>,
+    publish: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,6 +62,7 @@ pub struct Config {
     pub pipelines: HashMap<String, Pipeline>,
     pub branch_pipeline: Option<BranchPipelineConfig>,
     pub autobump: Option<BumpLevel>,
+    pub packages: HashMap<String, PackageOverride>,
 }
 
 /// A `[registries.<name>]` entry in `.cargo/config.toml`.
@@ -205,11 +215,35 @@ impl Config {
             }
         });
 
+        let packages = file
+            .packages
+            .into_iter()
+            .map(|(name, def)| {
+                let autobump = def
+                    .autobump
+                    .as_deref()
+                    .map(|s| s.parse::<BumpLevel>())
+                    .transpose()
+                    .with_context(|| {
+                        format!("invalid autobump for package '{name}'")
+                    })?;
+                Ok((
+                    name,
+                    PackageOverride {
+                        autobump,
+                        pipeline: def.pipeline,
+                        publish: def.publish,
+                    },
+                ))
+            })
+            .collect::<Result<HashMap<_, _>>>()?;
+
         Ok(Self {
             registries,
             pipelines,
             branch_pipeline,
             autobump,
+            packages,
         })
     }
 
@@ -265,7 +299,13 @@ impl Config {
             pipelines,
             branch_pipeline: None,
             autobump: None,
+            packages: HashMap::new(),
         }
+    }
+
+    /// Get a per-package override by crate name.
+    pub fn package_override(&self, name: &str) -> Option<&PackageOverride> {
+        self.packages.get(name)
     }
 
     /// Get a pipeline by name, falling back to "default".
@@ -425,6 +465,68 @@ confirm = true
         let reg = cfg.registries.get("staging").unwrap();
         assert_eq!(reg.api_url.as_deref(), Some("http://explicit:3000/"));
         assert!(reg.confirm);
+    }
+
+    #[test]
+    fn parse_package_override_section() {
+        let toml = r#"
+autobump = "patch"
+
+[packages.foo]
+autobump = "minor"
+pipeline = "staging-only"
+publish = false
+"#;
+        let cfg = Config::from_toml(toml).expect("should parse");
+        let ov = cfg.package_override("foo").expect("foo override should exist");
+        assert_eq!(ov.autobump, Some(BumpLevel::Minor));
+        assert_eq!(ov.pipeline.as_deref(), Some("staging-only"));
+        assert_eq!(ov.publish, Some(false));
+    }
+
+    #[test]
+    fn per_package_autobump_overrides_global() {
+        let toml = r#"
+autobump = "patch"
+
+[packages.bar]
+autobump = "major"
+"#;
+        let cfg = Config::from_toml(toml).expect("should parse");
+        assert_eq!(cfg.autobump, Some(BumpLevel::Patch));
+        let ov = cfg.package_override("bar").unwrap();
+        assert_eq!(ov.autobump, Some(BumpLevel::Major));
+    }
+
+    #[test]
+    fn publish_false_override_parsed() {
+        let toml = r#"
+[packages.skip_me]
+publish = false
+"#;
+        let cfg = Config::from_toml(toml).expect("should parse");
+        let ov = cfg.package_override("skip_me").unwrap();
+        assert_eq!(ov.publish, Some(false));
+        assert_eq!(ov.autobump, None);
+    }
+
+    #[test]
+    fn empty_packages_section_is_valid() {
+        let toml = r#"
+[packages]
+"#;
+        let cfg = Config::from_toml(toml).expect("should parse");
+        assert!(cfg.package_override("anything").is_none());
+    }
+
+    #[test]
+    fn unknown_package_name_still_parses() {
+        let toml = r#"
+[packages.nonexistent_crate]
+autobump = "minor"
+"#;
+        let cfg = Config::from_toml(toml).expect("should parse without error");
+        assert!(cfg.package_override("nonexistent_crate").is_some());
     }
 
     #[test]
