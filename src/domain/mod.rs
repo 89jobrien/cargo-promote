@@ -50,6 +50,20 @@ pub struct PublishOpts {
     pub allow_dirty: bool,
     pub dry_run: bool,
     pub skip_confirm: bool,
+    /// TODO(#6): publish even if the version already exists on the registry.
+    pub force: bool,
+}
+
+/// Per-package configuration overrides from `[packages.<name>]` in promote.toml.
+/// TODO(#7): wire into Config::from_toml and merge into pipeline resolution.
+#[derive(Debug, Clone, Default)]
+pub struct PackageOverride {
+    /// Override the global autobump level for this package.
+    pub autobump: Option<version::BumpLevel>,
+    /// Use a specific pipeline instead of "default".
+    pub pipeline: Option<String>,
+    /// Skip this package in publish-all when false.
+    pub publish: Option<bool>,
 }
 
 /// Info about a crate in a registry.

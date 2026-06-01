@@ -147,7 +147,7 @@ fn conformance_p3_publish_receives_exact_inputs() {
     let opts = PublishOpts {
         allow_dirty: true,
         dry_run: true,
-        skip_confirm: false,
+        ..Default::default()
     };
 
     pub_.publish(&krate, &reg, &opts)

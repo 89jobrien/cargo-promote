@@ -41,53 +41,6 @@ pub struct Api {
     notifier: Box<dyn Notifier>,
 }
 
-/// Builder for `Api` with injectable dependencies.
-pub struct ApiBuilder {
-    config: Option<Config>,
-    engine: Option<Box<dyn PipelineRunner>>,
-    registry_query: Option<Box<dyn RegistryQuery>>,
-    notifier: Option<Box<dyn Notifier>>,
-}
-
-impl ApiBuilder {
-    pub fn config(mut self, config: Config) -> Self {
-        self.config = Some(config);
-        self
-    }
-
-    pub fn engine(mut self, engine: Box<dyn PipelineRunner>) -> Self {
-        self.engine = Some(engine);
-        self
-    }
-
-    pub fn registry_query(mut self, query: Box<dyn RegistryQuery>) -> Self {
-        self.registry_query = Some(query);
-        self
-    }
-
-    pub fn notifier(mut self, notifier: Box<dyn Notifier>) -> Self {
-        self.notifier = Some(notifier);
-        self
-    }
-
-    pub fn build(self) -> Result<Api> {
-        Ok(Api {
-            config: self
-                .config
-                .ok_or_else(|| anyhow::anyhow!("config required"))?,
-            engine: self
-                .engine
-                .ok_or_else(|| anyhow::anyhow!("engine required"))?,
-            registry_query: self
-                .registry_query
-                .ok_or_else(|| anyhow::anyhow!("registry_query required"))?,
-            notifier: self
-                .notifier
-                .ok_or_else(|| anyhow::anyhow!("notifier required"))?,
-        })
-    }
-}
-
 impl Api {
     /// Build with default adapters (CargoPublisher, GiteaRegistry,
     /// NoopNotifier) and auto-accepting confirmer.
@@ -126,16 +79,6 @@ impl Api {
             ))),
             notifier: Box::new(infra::notify::SpawnNotifier { command }),
         })
-    }
-
-    /// Return a builder for full dependency injection.
-    pub fn builder() -> ApiBuilder {
-        ApiBuilder {
-            config: None,
-            engine: None,
-            registry_query: None,
-            notifier: None,
-        }
     }
 
     /// Access the loaded configuration.
@@ -296,8 +239,8 @@ impl Api {
         };
         let opts = PublishOpts {
             allow_dirty,
-            dry_run: false,
             skip_confirm: true,
+            ..Default::default()
         };
 
         let node_map: HashMap<&str, &depgraph::CrateNode> =
@@ -408,6 +351,7 @@ impl Api {
     /// Defer a branch promotion (merge from one stage branch to the
     /// next). Verifies the promote.lock hash before creating the
     /// ticket.
+    // qual:allow(iosp) reason: "integration root — orchestrates validation + deferral"
     pub fn defer_branch(
         &self,
         path: Option<&Path>,
@@ -462,6 +406,7 @@ impl Api {
     /// automatically executes the merge and push. The ticket is
     /// only marked confirmed after the merge succeeds — if the
     /// merge fails, the ticket remains pending.
+    // qual:allow(iosp) reason: "integration root — orchestrates validation + merge + confirm"
     pub fn confirm_deferral(
         &self,
         repo_root: &Path,
@@ -512,6 +457,7 @@ impl Api {
     }
 
     /// List all deferrals (optionally filtered to pending only).
+    // qual:allow(iosp) reason: "thin delegation with filter flag"
     pub fn deferrals(repo_root: &Path, pending_only: bool) -> Result<Vec<Deferral>> {
         if pending_only {
             Deferral::list_pending(repo_root)
@@ -533,3 +479,4 @@ pub struct PublishAllResult {
     /// Names of crates blocked by path-only dependencies.
     pub blocked: Vec<String>,
 }
+

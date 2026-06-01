@@ -41,6 +41,7 @@ impl CargoTokenResolver {
 }
 
 impl TokenResolver for CargoTokenResolver {
+    // qual:allow(iosp) reason: "I/O boundary — env lookup + file fallback"
     fn resolve(&self, registry_name: &str) -> Result<Option<SecretString>, PromoteError> {
         // 1. Check CARGO_REGISTRIES_{NAME}_TOKEN
         let env_key = Self::env_var_name(registry_name);

@@ -148,6 +148,7 @@ impl BranchPipeline {
     }
 
     /// Branch from one stage to the next (with hash verification).
+    // qual:allow(iosp) reason: "integration root — orchestrates verify + merge + push"
     pub fn branch(
         stages: &[String],
         from_stage: &str,

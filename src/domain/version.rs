@@ -166,7 +166,7 @@ mod tests {
     }
 
     #[test]
-    fn bump_manifest_path_returns_correct_path() {
+    fn bump_manifest_version_own_cargo_toml_is_valid() {
         // Verify we can call it on this project's own Cargo.toml (read-only check)
         let manifest = PathBuf::from("Cargo.toml");
         let content = std::fs::read_to_string(&manifest).unwrap();

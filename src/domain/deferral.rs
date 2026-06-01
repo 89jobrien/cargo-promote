@@ -14,6 +14,7 @@ pub enum DeferralStatus {
     Rejected,
 }
 
+
 /// What kind of promotion is being deferred.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -76,6 +77,7 @@ impl Deferral {
     }
 
     /// List all deferrals in the repo.
+    // qual:allow(iosp) reason: "I/O boundary — reads dir then parses files"
     pub fn list(repo_root: &Path) -> Result<Vec<Self>> {
         let dir = Self::deferrals_dir(repo_root);
         if !dir.exists() {
@@ -106,28 +108,32 @@ impl Deferral {
             .collect())
     }
 
-    /// Confirm a deferral with an optional reason.
-    pub fn confirm(repo_root: &Path, ticket: &str, reason: &str) -> Result<Self> {
+    /// Transition a pending deferral to the given status.
+    // qual:allow(iosp) reason: "I/O boundary — read, validate, write"
+    fn update_status(
+        repo_root: &Path,
+        ticket: &str,
+        new_status: DeferralStatus,
+        reason: &str,
+    ) -> Result<Self> {
         let mut d = Self::read(repo_root, ticket)?;
         if d.status != DeferralStatus::Pending {
-            anyhow::bail!("deferral '{}' is already {:?}", ticket, d.status,);
+            anyhow::bail!("deferral '{}' is already {:?}", ticket, d.status);
         }
-        d.status = DeferralStatus::Confirmed;
+        d.status = new_status;
         d.reason = reason.to_string();
         d.write(repo_root)?;
         Ok(d)
     }
 
+    /// Confirm a deferral with an optional reason.
+    pub fn confirm(repo_root: &Path, ticket: &str, reason: &str) -> Result<Self> {
+        Self::update_status(repo_root, ticket, DeferralStatus::Confirmed, reason)
+    }
+
     /// Reject a deferral with an optional reason.
     pub fn reject(repo_root: &Path, ticket: &str, reason: &str) -> Result<Self> {
-        let mut d = Self::read(repo_root, ticket)?;
-        if d.status != DeferralStatus::Pending {
-            anyhow::bail!("deferral '{}' is already {:?}", ticket, d.status,);
-        }
-        d.status = DeferralStatus::Rejected;
-        d.reason = reason.to_string();
-        d.write(repo_root)?;
-        Ok(d)
+        Self::update_status(repo_root, ticket, DeferralStatus::Rejected, reason)
     }
 }
 

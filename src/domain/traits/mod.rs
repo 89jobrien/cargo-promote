@@ -25,6 +25,18 @@ impl<T: Publisher> Publisher for &T {
 /// Port: query a registry for crate information.
 pub trait RegistryQuery {
     fn list_crates(&self, registry: &Registry) -> Result<Vec<CrateInfo>, PromoteError>;
+
+    /// Check if a specific crate@version already exists on the registry.
+    /// TODO(#6): implement in GiteaRegistry adapter
+    fn crate_exists(
+        &self,
+        _registry: &Registry,
+        _name: &str,
+        _version: &str,
+    ) -> Result<bool, PromoteError> {
+        // Default: assume not published (backwards-compatible).
+        Ok(false)
+    }
 }
 
 /// Port: perform fast-forward merges between branches.
@@ -97,4 +109,51 @@ pub trait TokenResolver {
 /// Port: notify external systems about promotion events.
 pub trait Notifier {
     fn on_deferred(&self, deferral: &Deferral) -> Result<(), PromoteError>;
+}
+
+/// Port: interact with a git forge (Gitea, GitHub, GitLab) for
+/// PR/release management.
+/// TODO(#8): implement GiteaForge and GitHubForge adapters
+pub trait Forge {
+    /// Create a release for the given tag.
+    fn create_release(&self, tag: &str, body: &str) -> Result<(), PromoteError>;
+
+    /// Open a pull request and return its number.
+    fn create_pr(
+        &self,
+        title: &str,
+        body: &str,
+        head: &str,
+        base: &str,
+    ) -> Result<u64, PromoteError>;
+
+    /// Post a comment on an existing PR.
+    fn comment_pr(&self, pr_number: u64, body: &str) -> Result<(), PromoteError>;
+
+    /// Close a PR.
+    fn close_pr(&self, pr_number: u64) -> Result<(), PromoteError>;
+}
+
+/// No-op forge for environments without forge access.
+pub struct NoopForge;
+
+impl Forge for NoopForge {
+    fn create_release(&self, _tag: &str, _body: &str) -> Result<(), PromoteError> {
+        Ok(())
+    }
+    fn create_pr(
+        &self,
+        _title: &str,
+        _body: &str,
+        _head: &str,
+        _base: &str,
+    ) -> Result<u64, PromoteError> {
+        Ok(0)
+    }
+    fn comment_pr(&self, _pr_number: u64, _body: &str) -> Result<(), PromoteError> {
+        Ok(())
+    }
+    fn close_pr(&self, _pr_number: u64) -> Result<(), PromoteError> {
+        Ok(())
+    }
 }

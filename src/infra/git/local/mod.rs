@@ -17,145 +17,78 @@ impl LocalGit {
         &self.repo_root
     }
 
-    /// Check if the working tree is dirty.
-    pub fn is_dirty(&self) -> Result<bool, PromoteError> {
-        let output = Command::new("git")
-            .args(["status", "--porcelain"])
+    /// Run a git command and return an error with `err_msg` on failure.
+    fn run(&self, args: &[&str], err_msg: &str) -> Result<(), PromoteError> {
+        let status = Command::new("git")
+            .args(args)
             .current_dir(self.path())
-            .output()
+            .status()
             .map_err(|e| PromoteError::Other(e.into()))?;
-        Ok(!output.stdout.is_empty())
-    }
-
-    /// Get the current branch name.
-    pub fn current_branch(&self) -> Result<String, PromoteError> {
-        let output = Command::new("git")
-            .args(["branch", "--show-current"])
-            .current_dir(self.path())
-            .output()
-            .map_err(|e| PromoteError::Other(e.into()))?;
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        if !status.success() {
+            return Err(PromoteError::Other(anyhow::anyhow!("{err_msg}")));
+        }
+        Ok(())
     }
 
     /// Stage files for commit.
     pub fn stage(&self, files: &[&str]) -> Result<(), PromoteError> {
-        let mut cmd = Command::new("git");
-        cmd.arg("add").current_dir(self.path());
-        for f in files {
-            cmd.arg(f);
-        }
-        let status = cmd.status().map_err(|e| PromoteError::Other(e.into()))?;
-        if !status.success() {
-            return Err(PromoteError::Other(anyhow::anyhow!(
-                "git add failed for: {}",
-                files.join(", ")
-            )));
-        }
-        Ok(())
+        let mut args = vec!["add"];
+        args.extend_from_slice(files);
+        self.run(&args, &format!("git add failed for: {}", files.join(", ")))
     }
 
     /// Create a commit with the given message.
     pub fn commit(&self, message: &str) -> Result<(), PromoteError> {
-        let status = Command::new("git")
-            .args(["commit", "-m", message])
-            .current_dir(self.path())
-            .status()
-            .map_err(|e| PromoteError::Other(e.into()))?;
-        if !status.success() {
-            return Err(PromoteError::Other(anyhow::anyhow!("git commit failed")));
-        }
-        Ok(())
+        self.run(&["commit", "-m", message], "git commit failed")
     }
 
     /// Push the current HEAD to origin.
     pub fn push_head(&self) -> Result<(), PromoteError> {
-        let status = Command::new("git")
-            .args(["push", "origin", "HEAD"])
-            .current_dir(self.path())
-            .status()
-            .map_err(|e| PromoteError::Other(e.into()))?;
-        if !status.success() {
-            return Err(PromoteError::Other(anyhow::anyhow!("git push HEAD failed")));
-        }
-        Ok(())
+        self.run(&["push", "origin", "HEAD"], "git push HEAD failed")
     }
 }
 
 impl BranchMerger for LocalGit {
     fn fast_forward(&self, source: &str, target: &str) -> Result<(), PromoteError> {
-        let _fetch = Command::new("git")
+        // Best-effort fetch; ignore errors (may be offline).
+        let _ = Command::new("git")
             .args(["fetch", "origin"])
             .current_dir(self.path())
             .output();
 
-        let checkout = Command::new("git")
-            .args(["checkout", target])
-            .current_dir(self.path())
-            .status()
-            .map_err(|e| PromoteError::Other(e.into()))?;
-        if !checkout.success() {
-            return Err(PromoteError::Other(anyhow::anyhow!(
-                "failed to checkout branch '{target}'"
-            )));
-        }
-
-        let status = Command::new("git")
-            .args(["merge", "--ff-only", source])
-            .current_dir(self.path())
-            .status()
-            .map_err(|e| PromoteError::Other(e.into()))?;
-        if !status.success() {
-            return Err(PromoteError::Other(anyhow::anyhow!(
-                "fast-forward merge from '{source}' to '{target}' failed"
-            )));
-        }
-        Ok(())
+        self.run(
+            &["checkout", target],
+            &format!("failed to checkout branch '{target}'"),
+        )?;
+        self.run(
+            &["merge", "--ff-only", source],
+            &format!("fast-forward merge from '{source}' to '{target}' failed"),
+        )
     }
 }
 
 impl RemotePusher for LocalGit {
     fn push_branch(&self, branch: &str) -> Result<(), PromoteError> {
-        let status = Command::new("git")
-            .args(["push", "origin", branch])
-            .current_dir(self.path())
-            .status()
-            .map_err(|e| PromoteError::Other(e.into()))?;
-        if !status.success() {
-            return Err(PromoteError::Other(anyhow::anyhow!(
-                "failed to push branch '{branch}'"
-            )));
-        }
-        Ok(())
+        self.run(
+            &["push", "origin", branch],
+            &format!("failed to push branch '{branch}'"),
+        )
     }
 
     fn push_tag(&self, tag: &str) -> Result<(), PromoteError> {
-        let status = Command::new("git")
-            .args(["push", "origin", tag])
-            .current_dir(self.path())
-            .status()
-            .map_err(|e| PromoteError::Other(e.into()))?;
-        if !status.success() {
-            return Err(PromoteError::Other(anyhow::anyhow!(
-                "failed to push tag '{tag}'"
-            )));
-        }
-        Ok(())
+        self.run(
+            &["push", "origin", tag],
+            &format!("failed to push tag '{tag}'"),
+        )
     }
 }
 
 impl Tagger for LocalGit {
     fn create_tag(&self, name: &str, message: &str) -> Result<(), PromoteError> {
-        let status = Command::new("git")
-            .args(["tag", "-a", name, "-m", message])
-            .current_dir(self.path())
-            .status()
-            .map_err(|e| PromoteError::Other(e.into()))?;
-        if !status.success() {
-            return Err(PromoteError::Other(anyhow::anyhow!(
-                "git tag '{name}' failed"
-            )));
-        }
-        Ok(())
+        self.run(
+            &["tag", "-a", name, "-m", message],
+            &format!("git tag '{name}' failed"),
+        )
     }
 }
 

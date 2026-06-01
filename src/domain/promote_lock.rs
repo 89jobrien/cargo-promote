@@ -20,20 +20,11 @@ pub struct PromoteLock {
 }
 
 impl PromoteLock {
-    /// Compute the SHA-256 hash of all publishable source files.
-    ///
-    /// Includes:
-    ///   - src/**/*.rs
-    ///   - Cargo.toml
-    ///   - Cargo.lock
-    ///
-    /// Excludes:
-    ///   - promote.lock, promote.toml, tests/, docs/, .github/, .ctx/, .gitignore
-    pub fn compute_source_hash(repo_root: &Path) -> Result<String> {
-        let mut hasher = Sha256::new();
+    /// Collect all publishable source file paths (sorted, deterministic).
+    // qual:allow(iosp) reason: "file collection — inherently mixes I/O with path logic"
+    fn publishable_files(repo_root: &Path) -> Result<Vec<PathBuf>> {
         let mut files = Vec::new();
 
-        // Collect Cargo.toml and Cargo.lock
         let cargo_toml = repo_root.join("Cargo.toml");
         let cargo_lock = repo_root.join("Cargo.lock");
 
@@ -44,15 +35,19 @@ impl PromoteLock {
             files.push(cargo_lock);
         }
 
-        // Collect src/**/*.rs
         if let Ok(entries) = fs::read_dir(repo_root.join("src")) {
             Self::collect_rust_files(entries, &mut files)?;
         }
 
-        // Sort for deterministic ordering
         files.sort();
+        Ok(files)
+    }
 
-        // Hash each file's content in order
+    /// Compute the SHA-256 hash of all publishable source files.
+    pub fn compute_source_hash(repo_root: &Path) -> Result<String> {
+        let files = Self::publishable_files(repo_root)?;
+        let mut hasher = Sha256::new();
+
         for file_path in files {
             let content = fs::read(&file_path)
                 .with_context(|| format!("cannot read {}", file_path.display()))?;
@@ -63,6 +58,7 @@ impl PromoteLock {
         Ok(format!("sha256:{:x}", hash))
     }
 
+    // qual:allow(iosp) reason: "recursive directory walker — inherently mixes I/O with logic"
     fn collect_rust_files(dir: fs::ReadDir, files: &mut Vec<PathBuf>) -> Result<()> {
         for entry in dir {
             let entry = entry?;
@@ -94,6 +90,7 @@ impl PromoteLock {
     }
 
     /// Verify that the source hash matches the current state.
+    // qual:allow(iosp) reason: "I/O boundary — compute then compare"
     pub fn verify_hash(&self, repo_root: &Path) -> Result<()> {
         let current_hash = Self::compute_source_hash(repo_root)?;
         if current_hash != self.source_hash {
