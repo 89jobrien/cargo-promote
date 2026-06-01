@@ -260,27 +260,14 @@ impl Api {
 
     /// Branch from one stage to the next.
     pub fn branch(&self, path: Option<&Path>, from: &str, cwd: &Path) -> Result<()> {
-        use infra::git::local::{GitCliMerger, GitCliPusher};
-
         let branch_cfg = self
             .config
             .branch_pipeline
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("branch pipeline not configured in promote.toml"))?;
         let repo_root = path.unwrap_or(cwd);
-        let merger = GitCliMerger {
-            repo_root: repo_root.to_path_buf(),
-        };
-        let pusher = GitCliPusher {
-            repo_root: repo_root.to_path_buf(),
-        };
-        domain::pipeline::BranchPipeline::branch(
-            &branch_cfg.stages,
-            from,
-            &merger,
-            &pusher,
-            repo_root,
-        )?;
+        let git = infra::git::local::LocalGit::new(repo_root.to_path_buf());
+        domain::pipeline::BranchPipeline::branch(&branch_cfg.stages, from, &git, &git, repo_root)?;
         Ok(())
     }
 
@@ -405,8 +392,6 @@ impl Api {
         }
 
         if d.kind == DeferralKind::Branch {
-            use infra::git::local::{GitCliMerger, GitCliPusher};
-
             let branch_cfg =
                 self.config.branch_pipeline.as_ref().ok_or_else(|| {
                     anyhow::anyhow!("branch pipeline not configured in promote.toml")
@@ -416,19 +401,14 @@ impl Api {
             let lock = domain::promote_lock::PromoteLock::read(repo_root)?;
             lock.verify_hash(repo_root)?;
 
-            let merger = GitCliMerger {
-                repo_root: repo_root.to_path_buf(),
-            };
-            let pusher = GitCliPusher {
-                repo_root: repo_root.to_path_buf(),
-            };
+            let git = infra::git::local::LocalGit::new(repo_root.to_path_buf());
 
             // Merge first — only mark confirmed if this succeeds.
             domain::pipeline::BranchPipeline::branch(
                 &branch_cfg.stages,
                 &d.from_stage,
-                &merger,
-                &pusher,
+                &git,
+                &git,
                 repo_root,
             )?;
 
