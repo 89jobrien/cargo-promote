@@ -17,6 +17,11 @@ pub struct CrateNode {
     pub path_only_deps: Vec<String>,
 }
 
+// TODO(cargo-utils): replace manual workspace member resolution with
+// cargo_metadata::MetadataCommand to handle glob patterns in
+// [workspace.members] and path canonicalization correctly.
+// Ref: release-plz/cargo_utils/src/workspace_members.rs
+
 /// Scan a directory tree for all Cargo.toml files and build a dep graph.
 pub fn scan_workspace_tree(root: &Path, skip: &[&str]) -> Result<Vec<CrateNode>> {
     let dirs = scannable_dirs(root, skip)?;

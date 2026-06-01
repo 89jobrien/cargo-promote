@@ -52,6 +52,11 @@ pub fn bump_version(version: &Version, level: BumpLevel) -> Version {
     v
 }
 
+// TODO(cargo-utils): replace manual TOML version editing with a LocalManifest
+// struct (toml_edit-based). Add support for workspace-inherited versions by
+// detecting version.workspace=true and bumping the workspace root instead.
+// Ref: release-plz/cargo_utils/src/local_manifest.rs
+
 /// Bump the version in a Cargo.toml file, preserving formatting.
 /// Returns `(old_version, new_version)`.
 pub fn bump_manifest_version(manifest_path: &Path, level: BumpLevel) -> Result<(Version, Version)> {

@@ -130,6 +130,11 @@ impl Config {
         })
     }
 
+    // TODO(cargo-utils): auto-discover registries from .cargo/config.toml
+    // hierarchy when promote.toml doesn't define them. Walk ancestor dirs
+    // + $CARGO_HOME, follow source-replacement chains.
+    // Ref: release-plz/cargo_utils/src/registry.rs
+
     /// Hardcoded default: cratebox -> crates.io (backwards compatible).
     pub fn default_config() -> Self {
         let base_url = std::env::var("REGISTRY_URL")

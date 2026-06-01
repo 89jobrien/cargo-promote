@@ -2,6 +2,11 @@ use crate::domain::traits::RegistryQuery;
 use crate::domain::{CrateInfo, PromoteError, Registry};
 use std::process::Command;
 
+// TODO(cargo-utils): add TokenResolver port to resolve registry auth tokens
+// via env vars (CARGO_REGISTRIES_{NAME}_TOKEN) then ~/.cargo/credentials.toml,
+// wrapped in secrecy::SecretString. Pass Bearer token to curl calls here.
+// Ref: release-plz/cargo_utils/src/token.rs
+
 /// Adapter: queries a Gitea cargo packages API for crate listings.
 pub struct GiteaRegistry;
 

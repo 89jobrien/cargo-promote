@@ -2,6 +2,10 @@ use super::CrateRef;
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
+// TODO(cargo-utils): replace manual TOML parsing with LocalManifest struct
+// for consistent format-preserving manifest access across resolve + bump.
+// Ref: release-plz/cargo_utils/src/local_manifest.rs
+
 /// Resolve a CrateRef from a manifest path and optional package name.
 pub fn resolve_crate(path: Option<&Path>, package: Option<&str>) -> Result<CrateRef> {
     let manifest_path = manifest_for(path);
