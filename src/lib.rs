@@ -22,7 +22,8 @@ use infra::token::CargoTokenResolver;
 /// If autobump is configured, bump the manifest version and return an
 /// updated CrateRef.
 pub fn maybe_autobump(krate: CrateRef, cfg: &Config) -> Result<CrateRef> {
-    let Some(level) = cfg.autobump else {
+    let per_pkg = cfg.package_override(&krate.name).and_then(|o| o.autobump);
+    let Some(level) = per_pkg.or(cfg.autobump) else {
         return Ok(krate);
     };
     let (old, new) = version::bump_manifest_version(&krate.manifest_path, level)?;
@@ -209,6 +210,12 @@ impl Api {
         let publishable_names: HashSet<&str> = publishable
             .iter()
             .filter(|n| n.path_only_deps.is_empty())
+            .filter(|n| {
+                self.config
+                    .package_override(&n.name)
+                    .and_then(|o| o.publish)
+                    != Some(false)
+            })
             .map(|n| n.name.as_str())
             .collect();
 
