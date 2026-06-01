@@ -3,7 +3,7 @@ use crate::domain::{Pipeline, Registry, Stage};
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 const CONFIG_FILENAME: &str = "promote.toml";
 
@@ -55,19 +55,102 @@ pub struct Config {
     pub autobump: Option<BumpLevel>,
 }
 
+/// A `[registries.<name>]` entry in `.cargo/config.toml`.
+#[derive(Debug, Deserialize)]
+struct CargoRegistryEntry {
+    index: Option<String>,
+}
+
+/// Top-level shape of `.cargo/config.toml` (only the fields we need).
+#[derive(Debug, Deserialize)]
+struct CargoConfigFile {
+    #[serde(default)]
+    registries: HashMap<String, CargoRegistryEntry>,
+}
+
+/// Strip `sparse+` prefix from an index URL to derive the API URL.
+fn index_to_api_url(index: &str) -> String {
+    index.strip_prefix("sparse+").unwrap_or(index).to_string()
+}
+
+/// Collect candidate `.cargo/config.toml` paths by walking ancestors, then
+/// appending `$CARGO_HOME/config.toml` (defaulting to `~/.cargo/config.toml`).
+fn cargo_config_paths(dir: &Path) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    let mut current = Some(dir.to_path_buf());
+    while let Some(d) = current {
+        for name in &["config.toml", "config"] {
+            let candidate = d.join(".cargo").join(name);
+            if candidate.is_file() {
+                paths.push(candidate);
+                break; // only one per directory
+            }
+        }
+        current = d.parent().map(Path::to_path_buf);
+    }
+    // Also check $CARGO_HOME
+    let cargo_home = std::env::var("CARGO_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::env::var("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| PathBuf::from("/"))
+                .join(".cargo")
+        });
+    for name in &["config.toml", "config"] {
+        let candidate = cargo_home.join(name);
+        if candidate.is_file() && !paths.contains(&candidate) {
+            paths.push(candidate);
+            break;
+        }
+    }
+    paths
+}
+
+/// Discover registries from `.cargo/config.toml` files by walking ancestor
+/// directories and checking `$CARGO_HOME`.
+pub fn discover_cargo_registries(dir: &Path) -> HashMap<String, Registry> {
+    let mut result = HashMap::new();
+    for path in cargo_config_paths(dir) {
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let parsed: CargoConfigFile = match toml::from_str(&content) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        for (name, entry) in parsed.registries {
+            // First config found wins (closest ancestor first).
+            result.entry(name.clone()).or_insert_with(|| {
+                let api_url = entry.index.as_deref().map(index_to_api_url);
+                Registry {
+                    name: name.clone(),
+                    cargo_name: Some(name),
+                    api_url,
+                    confirm: false,
+                }
+            });
+        }
+    }
+    result
+}
+
 impl Config {
     /// Load from `promote.toml` in the given directory, or fall back to
     /// hardcoded defaults matching the original cratebox -> crates.io behavior.
     // qual:allow(iosp) reason: "I/O boundary — reads file then delegates to from_toml"
     pub fn load(dir: &Path) -> Result<Self> {
         let config_path = dir.join(CONFIG_FILENAME);
-        if config_path.exists() {
+        let mut cfg = if config_path.exists() {
             let content = std::fs::read_to_string(&config_path)
                 .with_context(|| format!("cannot read {}", config_path.display()))?;
-            Self::from_toml(&content)
+            Self::from_toml(&content)?
         } else {
-            Ok(Self::default_config())
-        }
+            Self::default_config()
+        };
+        cfg.merge_discovered(dir);
+        Ok(cfg)
     }
 
     /// Parse from TOML string.
@@ -130,10 +213,14 @@ impl Config {
         })
     }
 
-    // TODO(cargo-utils, #2): auto-discover registries from .cargo/config.toml
-    // hierarchy when promote.toml doesn't define them. Walk ancestor dirs
-    // + $CARGO_HOME, follow source-replacement chains.
-    // Ref: release-plz/cargo_utils/src/registry.rs
+    /// Merge discovered cargo registries into this config. Existing entries
+    /// (from promote.toml) take precedence.
+    fn merge_discovered(&mut self, dir: &Path) {
+        let discovered = discover_cargo_registries(dir);
+        for (name, reg) in discovered {
+            self.registries.entry(name).or_insert(reg);
+        }
+    }
 
     /// Hardcoded default: cratebox -> crates.io (backwards compatible).
     pub fn default_config() -> Self {
@@ -281,5 +368,73 @@ stages = ["nonexistent"]
         let toml = r#"autobump = "bogus""#;
         let result = Config::from_toml(toml);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn discover_registries_from_cargo_config() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cargo_dir = tmp.path().join(".cargo");
+        std::fs::create_dir_all(&cargo_dir).unwrap();
+        std::fs::write(
+            cargo_dir.join("config.toml"),
+            r#"
+[registries.mybox]
+index = "sparse+http://localhost:3000/api/packages/joe/cargo/"
+"#,
+        )
+        .unwrap();
+
+        let discovered = discover_cargo_registries(tmp.path());
+        assert!(
+            discovered.contains_key("mybox"),
+            "should discover mybox registry"
+        );
+        let reg = discovered.get("mybox").unwrap();
+        assert_eq!(reg.name, "mybox");
+        assert_eq!(reg.cargo_name.as_deref(), Some("mybox"));
+        assert_eq!(
+            reg.api_url.as_deref(),
+            Some("http://localhost:3000/api/packages/joe/cargo/")
+        );
+    }
+
+    #[test]
+    fn promote_toml_takes_precedence_over_cargo_config() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cargo_dir = tmp.path().join(".cargo");
+        std::fs::create_dir_all(&cargo_dir).unwrap();
+        std::fs::write(
+            cargo_dir.join("config.toml"),
+            r#"
+[registries.staging]
+index = "sparse+http://discovered:3000/"
+"#,
+        )
+        .unwrap();
+        std::fs::write(
+            tmp.path().join("promote.toml"),
+            r#"
+[registries.staging]
+api_url = "http://explicit:3000/"
+confirm = true
+"#,
+        )
+        .unwrap();
+
+        let cfg = Config::load(tmp.path()).unwrap();
+        let reg = cfg.registries.get("staging").unwrap();
+        assert_eq!(reg.api_url.as_deref(), Some("http://explicit:3000/"));
+        assert!(reg.confirm);
+    }
+
+    #[test]
+    fn missing_cargo_config_has_no_local_registries() {
+        // A unique registry name that won't exist in any real config
+        let tmp = tempfile::tempdir().unwrap();
+        let discovered = discover_cargo_registries(tmp.path());
+        assert!(
+            !discovered.contains_key("__nonexistent_test_registry__"),
+            "should not find a made-up registry name"
+        );
     }
 }
