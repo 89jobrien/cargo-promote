@@ -1,30 +1,23 @@
 use super::CrateRef;
+use super::local_manifest::LocalManifest;
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
-
-// TODO(cargo-utils, #4): replace manual TOML parsing with LocalManifest struct
-// for consistent format-preserving manifest access across resolve + bump.
-// Ref: release-plz/cargo_utils/src/local_manifest.rs
 
 /// Resolve a CrateRef from a manifest path and optional package name.
 pub fn resolve_crate(path: Option<&Path>, package: Option<&str>) -> Result<CrateRef> {
     let manifest_path = manifest_for(path);
-    let doc = read_manifest(&manifest_path)?;
+    let manifest = LocalManifest::try_new(&manifest_path)?;
 
     let (name, version) = if let Some(pkg_name) = package {
-        let ver = extract_version(&doc).unwrap_or_else(|| "0.0.0".to_string());
+        let ver = manifest.package_version().unwrap_or("0.0.0").to_string();
         (pkg_name.to_string(), ver)
     } else {
-        let pkg = doc.get("package").context("no [package] in Cargo.toml")?;
-        let n = pkg
-            .get("name")
-            .and_then(|n| n.as_str())
-            .context("missing package.name")?;
-        let v = pkg
-            .get("version")
-            .and_then(|v| v.as_str())
-            .unwrap_or("0.0.0");
-        (n.to_string(), v.to_string())
+        let n = manifest
+            .package_name()
+            .context("missing package.name")?
+            .to_string();
+        let v = manifest.package_version().unwrap_or("0.0.0").to_string();
+        (n, v)
     };
 
     Ok(CrateRef {
@@ -43,23 +36,19 @@ pub struct MemberInfo {
 /// Describe the workspace or single-crate at the given path.
 pub fn describe_manifest(path: Option<&Path>) -> Result<ManifestDescription> {
     let manifest_path = manifest_for(path);
-    let doc = read_manifest(&manifest_path)?;
+    let manifest = LocalManifest::try_new(&manifest_path)?;
 
-    if let Some(members) = workspace_members(&doc) {
+    if let Some(members) = manifest.workspace_members() {
         let base = path.unwrap_or(Path::new("."));
         let infos = members
             .iter()
-            .filter_map(|m| m.as_str())
             .filter_map(|m| read_member_info(base, m))
             .collect();
         Ok(ManifestDescription::Workspace(infos))
-    } else if let Some(pkg) = doc.get("package") {
-        let name = pkg.get("name").and_then(|n| n.as_str()).unwrap_or("?");
-        let version = pkg.get("version").and_then(|v| v.as_str()).unwrap_or("?");
-        Ok(ManifestDescription::Single(MemberInfo {
-            name: name.to_string(),
-            version: version.to_string(),
-        }))
+    } else if manifest.package_name().is_some() {
+        let name = manifest.package_name().unwrap_or("?").to_string();
+        let version = manifest.package_version().unwrap_or("?").to_string();
+        Ok(ManifestDescription::Single(MemberInfo { name, version }))
     } else {
         Ok(ManifestDescription::Workspace(vec![]))
     }
@@ -75,43 +64,12 @@ fn manifest_for(path: Option<&Path>) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("Cargo.toml"))
 }
 
-fn read_manifest(manifest_path: &Path) -> Result<toml::Value> {
-    let content = std::fs::read_to_string(manifest_path)
-        .with_context(|| format!("cannot read {}", manifest_path.display()))?;
-    content.parse().context("invalid Cargo.toml")
-}
-
-fn extract_version(doc: &toml::Value) -> Option<String> {
-    doc.get("package")
-        .and_then(|p| p.get("version"))
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-}
-
-fn workspace_members(doc: &toml::Value) -> Option<&Vec<toml::Value>> {
-    doc.get("workspace")
-        .and_then(|w| w.get("members"))
-        .and_then(|m| m.as_array())
-}
-
 fn read_member_info(base: &Path, member: &str) -> Option<MemberInfo> {
-    let manifest = base.join(member).join("Cargo.toml");
-    let content = std::fs::read_to_string(&manifest).ok()?;
-    let doc: toml::Value = content.parse().ok()?;
-    let name = doc
-        .get("package")
-        .and_then(|p| p.get("name"))
-        .and_then(|n| n.as_str())
-        .unwrap_or("?");
-    let version = doc
-        .get("package")
-        .and_then(|p| p.get("version"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("?");
-    Some(MemberInfo {
-        name: name.to_string(),
-        version: version.to_string(),
-    })
+    let manifest_path = base.join(member).join("Cargo.toml");
+    let manifest = LocalManifest::try_new(&manifest_path).ok()?;
+    let name = manifest.package_name().unwrap_or("?").to_string();
+    let version = manifest.package_version().unwrap_or("?").to_string();
+    Some(MemberInfo { name, version })
 }
 
 #[cfg(test)]
@@ -149,13 +107,5 @@ mod tests {
     fn manifest_for_defaults_to_cwd() {
         let p = manifest_for(None);
         assert_eq!(p, PathBuf::from("Cargo.toml"));
-    }
-
-    #[test]
-    fn extract_version_from_own_manifest() {
-        let doc = read_manifest(Path::new("Cargo.toml")).expect("should read");
-        let version = extract_version(&doc);
-        assert!(version.is_some());
-        assert!(!version.unwrap().is_empty());
     }
 }

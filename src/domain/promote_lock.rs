@@ -67,7 +67,7 @@ impl PromoteLock {
         for entry in dir {
             let entry = entry?;
             let path = entry.path();
-            if path.is_file() && path.extension().map_or(false, |ext| ext == "rs") {
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "rs") {
                 files.push(path);
             } else if path.is_dir() {
                 Self::collect_rust_files(fs::read_dir(&path)?, files)?;

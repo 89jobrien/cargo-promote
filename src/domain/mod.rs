@@ -1,5 +1,6 @@
 pub mod deferral;
 pub mod depgraph;
+pub mod local_manifest;
 pub mod manifest;
 pub mod pipeline;
 pub mod promote_lock;
