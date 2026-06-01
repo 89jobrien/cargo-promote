@@ -15,19 +15,14 @@ pub enum DeferralStatus {
 }
 
 /// What kind of promotion is being deferred.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DeferralKind {
     /// Publish to a registry stage.
+    #[default]
     Registry,
     /// Merge a branch forward in the branch pipeline.
     Branch,
-}
-
-impl Default for DeferralKind {
-    fn default() -> Self {
-        Self::Registry
-    }
 }
 
 /// A deferred promotion ticket.

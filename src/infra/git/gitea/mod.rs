@@ -1,14 +1,21 @@
-use crate::domain::traits::RegistryQuery;
+use std::sync::Arc;
+
+use secrecy::ExposeSecret;
+
+use crate::domain::traits::{RegistryQuery, TokenResolver};
 use crate::domain::{CrateInfo, PromoteError, Registry};
 use std::process::Command;
 
-// TODO(cargo-utils, #1): add TokenResolver port to resolve registry auth tokens
-// via env vars (CARGO_REGISTRIES_{NAME}_TOKEN) then ~/.cargo/credentials.toml,
-// wrapped in secrecy::SecretString. Pass Bearer token to curl calls here.
-// Ref: release-plz/cargo_utils/src/token.rs
-
 /// Adapter: queries a Gitea cargo packages API for crate listings.
-pub struct GiteaRegistry;
+pub struct GiteaRegistry {
+    token_resolver: Arc<dyn TokenResolver>,
+}
+
+impl GiteaRegistry {
+    pub fn new(token_resolver: Arc<dyn TokenResolver>) -> Self {
+        Self { token_resolver }
+    }
+}
 
 impl RegistryQuery for GiteaRegistry {
     fn list_crates(&self, registry: &Registry) -> Result<Vec<CrateInfo>, PromoteError> {
@@ -22,13 +29,22 @@ impl RegistryQuery for GiteaRegistry {
 
         let url = format!("{api_url}/api/v1/crates");
 
-        let output = Command::new("curl")
-            .args(["-sf", &url])
-            .output()
-            .map_err(|e| PromoteError::QueryFailed {
-                registry: registry.name.clone(),
-                reason: format!("failed to run curl: {e}"),
-            })?;
+        let token = self.token_resolver.resolve(&registry.name)?;
+
+        let mut cmd = Command::new("curl");
+        cmd.args(["-sf"]);
+
+        if let Some(ref secret) = token {
+            let header = format!("Authorization: Bearer {}", secret.expose_secret());
+            cmd.args(["-H", &header]);
+        }
+
+        cmd.arg(&url);
+
+        let output = cmd.output().map_err(|e| PromoteError::QueryFailed {
+            registry: registry.name.clone(),
+            reason: format!("failed to run curl: {e}"),
+        })?;
 
         if !output.status.success() {
             return Err(PromoteError::QueryFailed {
