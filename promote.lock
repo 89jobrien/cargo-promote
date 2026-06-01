@@ -1,4 +1,4 @@
-version: 0.1.2
-source_hash: sha256:a46ef5492d4636849b393cb0e106a1f7e825895af70c531310a2935521ae53f8
-bumped_at: 20260601::064430
+version: 0.1.3
+source_hash: sha256:a0a23c8d8ae94da9766f46e5693551f09df661ee57cb78ad4fd68b67dac10325
+bumped_at: 20260601::070726
 entered_pipeline: develop
