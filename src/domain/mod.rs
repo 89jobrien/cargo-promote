@@ -1,3 +1,4 @@
+pub mod deferral;
 pub mod depgraph;
 pub mod manifest;
 pub mod pipeline;

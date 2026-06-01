@@ -1,34 +1,8 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use cargo_promote::config::Config;
-use cargo_promote::domain::depgraph;
-use cargo_promote::domain::manifest::{self, ManifestDescription};
-use cargo_promote::domain::pipeline::PipelineEngine;
-use cargo_promote::domain::traits::RegistryQuery;
-use cargo_promote::domain::version;
-use cargo_promote::domain::{CrateRef, Pipeline, PublishOpts, Stage};
-
-fn print_crate_line(name: &str, version: &str) {
-    println!("  {name} v{version}");
-}
-
-/// If autobump is configured, bump the manifest version and return an updated CrateRef.
-fn maybe_autobump(krate: CrateRef, cfg: &Config) -> Result<CrateRef> {
-    let Some(level) = cfg.autobump else {
-        return Ok(krate);
-    };
-    let (old, new) = version::bump_manifest_version(&krate.manifest_path, level)?;
-    eprintln!("=> autobump: {} v{old} -> v{new}", krate.name);
-    Ok(CrateRef {
-        version: new.to_string(),
-        ..krate
-    })
-}
-use cargo_promote::infra::cargo::CargoPublisher;
-use cargo_promote::infra::git::gitea::GiteaRegistry;
+use cargo_promote::Api;
 
 #[derive(Parser)]
 #[command(
@@ -108,7 +82,7 @@ enum Cmd {
         #[arg(long)]
         allow_dirty: bool,
 
-        /// Dry run — show publish order without publishing
+        /// Dry run -- show publish order without publishing
         #[arg(long)]
         dry_run: bool,
 
@@ -141,33 +115,65 @@ enum Cmd {
         #[arg(long)]
         to: Option<String>,
     },
-}
 
-/// Shared runtime context for all pipeline commands.
-struct App<'a> {
-    engine: &'a PipelineEngine<CargoPublisher>,
-    cfg: &'a Config,
-}
+    /// Defer promotion to the next stage (provisional, pending confirmation)
+    Defer {
+        #[arg(long)]
+        package: Option<String>,
+        #[arg(long)]
+        path: Option<PathBuf>,
+        #[arg(long)]
+        from: String,
+        #[arg(long)]
+        pipeline: Option<String>,
+        /// Defer a branch pipeline merge instead of a registry publish
+        #[arg(long)]
+        branch: bool,
+        /// Notification command to fire (non-blocking)
+        #[arg(long, num_args = 1..)]
+        command: Vec<String>,
+    },
 
-impl App<'_> {
-    fn resolve_pipeline(&self, name: Option<&str>) -> Result<&Pipeline> {
-        self.cfg
-            .pipeline(name)
-            .ok_or_else(|| anyhow::anyhow!("pipeline '{}' not found", name.unwrap_or("default")))
-    }
+    /// Confirm a pending deferral
+    Confirm {
+        /// Deferral ticket ID
+        ticket: String,
+        #[arg(short, long)]
+        path: Option<PathBuf>,
+        #[arg(long, default_value = "")]
+        reason: String,
+    },
+
+    /// Reject a pending deferral
+    Reject {
+        /// Deferral ticket ID
+        ticket: String,
+        #[arg(short, long)]
+        path: Option<PathBuf>,
+        #[arg(long, default_value = "")]
+        reason: String,
+    },
+
+    /// List deferrals
+    Deferrals {
+        #[arg(short, long)]
+        path: Option<PathBuf>,
+        /// Show only pending deferrals
+        #[arg(long)]
+        pending: bool,
+    },
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let cwd = std::env::current_dir().context("cannot determine current directory")?;
 
-    let publisher = CargoPublisher;
-    let engine = PipelineEngine::new(publisher, |prompt| {
+    let interactive_confirmer = |prompt: &str| -> bool {
         eprintln!("=> {prompt} [y/N]");
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).ok();
         input.trim().eq_ignore_ascii_case("y")
-    });
+    };
 
     match cli.cmd {
         Cmd::Publish {
@@ -177,33 +183,15 @@ fn main() -> Result<()> {
             pipeline,
             registry,
         } => {
-            let cfg = Config::load(path.as_deref().unwrap_or(&cwd))?;
-            let app = App {
-                engine: &engine,
-                cfg: &cfg,
-            };
-            let krate = manifest::resolve_crate(path.as_deref(), package.as_deref())?;
-            let krate = maybe_autobump(krate, &cfg)?;
-            let opts = PublishOpts {
+            let dir = path.as_deref().unwrap_or(&cwd);
+            let api = Api::with_confirmer(dir, interactive_confirmer)?;
+            api.publish(
+                path.as_deref(),
+                package.as_deref(),
                 allow_dirty,
-                ..Default::default()
-            };
-
-            if let Some(reg_name) = registry {
-                let reg = app
-                    .cfg
-                    .registry(&reg_name)
-                    .ok_or_else(|| anyhow::anyhow!("unknown registry '{reg_name}'"))?;
-                let stage = Stage {
-                    registry: reg.clone(),
-                };
-                app.engine.run_stage(&krate, &stage, &opts)?;
-            } else {
-                let pl = app.resolve_pipeline(pipeline.as_deref())?;
-                let first = pl.stages.first().context("pipeline has no stages")?;
-                app.engine.run_stage(&krate, first, &opts)?;
-            }
-            Ok(())
+                pipeline.as_deref(),
+                registry.as_deref(),
+            )
         }
 
         Cmd::Promote {
@@ -214,23 +202,16 @@ fn main() -> Result<()> {
             pipeline,
             from,
         } => {
-            let cfg = Config::load(path.as_deref().unwrap_or(&cwd))?;
-            let app = App {
-                engine: &engine,
-                cfg: &cfg,
-            };
-            let krate = manifest::resolve_crate(path.as_deref(), package.as_deref())?;
-            let opts = PublishOpts {
-                skip_confirm: yes,
+            let dir = path.as_deref().unwrap_or(&cwd);
+            let api = Api::with_confirmer(dir, interactive_confirmer)?;
+            api.promote(
+                path.as_deref(),
+                package.as_deref(),
+                yes,
                 dry_run,
-                ..Default::default()
-            };
-            let pl = app.resolve_pipeline(pipeline.as_deref())?;
-            let from_stage = from
-                .as_deref()
-                .unwrap_or_else(|| &pl.stages[0].registry.name);
-            app.engine.promote_next(&krate, pl, from_stage, &opts)?;
-            Ok(())
+                pipeline.as_deref(),
+                from.as_deref(),
+            )
         }
 
         Cmd::Ship {
@@ -240,36 +221,25 @@ fn main() -> Result<()> {
             yes,
             pipeline,
         } => {
-            let cfg = Config::load(path.as_deref().unwrap_or(&cwd))?;
-            let app = App {
-                engine: &engine,
-                cfg: &cfg,
-            };
-            let krate = manifest::resolve_crate(path.as_deref(), package.as_deref())?;
-            let krate = maybe_autobump(krate, &cfg)?;
-            let opts = PublishOpts {
+            let dir = path.as_deref().unwrap_or(&cwd);
+            let api = Api::with_confirmer(dir, interactive_confirmer)?;
+            api.ship(
+                path.as_deref(),
+                package.as_deref(),
                 allow_dirty,
-                skip_confirm: yes,
-                ..Default::default()
-            };
-            let pl = app.resolve_pipeline(pipeline.as_deref())?;
-            app.engine.run_full(&krate, pl, &opts)?;
-            Ok(())
+                yes,
+                pipeline.as_deref(),
+            )
         }
 
         Cmd::List { registry } => {
-            let cfg = Config::load(&cwd)?;
-            let query = GiteaRegistry;
-            let reg_name = registry.as_deref().unwrap_or("cratebox");
-            let reg = cfg
-                .registry(reg_name)
-                .ok_or_else(|| anyhow::anyhow!("unknown registry '{reg_name}'"))?;
-            let crates = query.list_crates(reg)?;
+            let api = Api::with_confirmer(&cwd, interactive_confirmer)?;
+            let crates = api.list(registry.as_deref())?;
             if crates.is_empty() {
                 println!("  (no crates published)");
             } else {
                 for c in &crates {
-                    print_crate_line(&c.name, &c.max_version);
+                    println!("  {} v{}", c.name, c.max_version);
                 }
                 println!("\n  {} crate(s) total", crates.len());
             }
@@ -283,158 +253,165 @@ fn main() -> Result<()> {
             registry,
             skip,
         } => {
-            let cfg = Config::load(&cwd)?;
+            let api = Api::with_confirmer(&cwd, interactive_confirmer)?;
             let root = path.unwrap_or_else(|| {
                 PathBuf::from(std::env::var("HOME").unwrap_or_default()).join("dev")
             });
             let skip_list: Vec<&str> = skip.split(',').map(|s| s.trim()).collect();
-            let nodes = depgraph::scan_workspace_tree(&root, &skip_list)?;
 
-            let publishable: Vec<_> = nodes.iter().filter(|n| !n.unpublishable).collect();
+            let result =
+                api.publish_all(&root, allow_dirty, dry_run, registry.as_deref(), &skip_list)?;
 
-            let order =
-                depgraph::topo_sort(&publishable.iter().map(|n| (*n).clone()).collect::<Vec<_>>())?;
-
-            // Report path-only deps
-            let blocked: Vec<_> = publishable
-                .iter()
-                .filter(|n| !n.path_only_deps.is_empty())
-                .collect();
-            if !blocked.is_empty() {
-                eprintln!("=== BLOCKED (path-only deps, no version field) ===");
-                for n in &blocked {
-                    eprintln!("  {} -> {:?}", n.name, n.path_only_deps);
-                }
-                eprintln!();
-            }
-
-            let publishable_names: HashSet<&str> = publishable
-                .iter()
-                .filter(|n| n.path_only_deps.is_empty())
-                .map(|n| n.name.as_str())
-                .collect();
-
-            let publish_order: Vec<_> = order
-                .iter()
-                .filter(|name| publishable_names.contains(name.as_str()))
-                .collect();
-
-            eprintln!("=== PUBLISH ORDER ({} crates) ===", publish_order.len());
-            for (i, name) in publish_order.iter().enumerate() {
+            eprintln!(
+                "=== PUBLISH ORDER ({} crates) ===",
+                result.publish_order.len()
+            );
+            for (i, name) in result.publish_order.iter().enumerate() {
                 eprintln!("  {:3}. {}", i + 1, name);
             }
 
             if dry_run {
-                eprintln!("\n(dry run — nothing published)");
-                return Ok(());
-            }
-
-            eprintln!();
-
-            let reg_name = registry.as_deref().unwrap_or("cratebox");
-            let reg = cfg
-                .registry(reg_name)
-                .ok_or_else(|| anyhow::anyhow!("unknown registry '{reg_name}'"))?;
-            let stage = Stage {
-                registry: reg.clone(),
-            };
-            let opts = PublishOpts {
-                allow_dirty,
-                dry_run: false,
-                skip_confirm: true,
-            };
-
-            let node_map: HashMap<&str, &depgraph::CrateNode> =
-                nodes.iter().map(|n| (n.name.as_str(), n)).collect();
-
-            let mut ok = 0usize;
-            let mut failed = Vec::new();
-            for name in &publish_order {
-                let node = node_map[name.as_str()];
-                let krate = CrateRef {
-                    name: node.name.clone(),
-                    version: node.version.clone(),
-                    manifest_path: node.manifest_path.clone(),
-                };
-                match engine.run_stage(&krate, &stage, &opts) {
-                    Ok(()) => ok += 1,
-                    Err(e) => {
-                        eprintln!("  FAIL: {} — {}", name, e);
-                        failed.push(name.as_str());
-                    }
+                eprintln!("\n(dry run -- nothing published)");
+            } else {
+                eprintln!("\n=== SUMMARY ===");
+                eprintln!("  Published: {}", result.ok);
+                eprintln!("  Failed: {}", result.failed.len());
+                eprintln!("  Blocked (path-only): {}", result.blocked.len());
+                if !result.failed.is_empty() {
+                    eprintln!("  Failed crates: {}", result.failed.join(", "));
                 }
             }
 
-            eprintln!("\n=== SUMMARY ===");
-            eprintln!("  Published: {ok}");
-            eprintln!("  Failed: {}", failed.len());
-            eprintln!("  Blocked (path-only): {}", blocked.len());
-            if !failed.is_empty() {
-                eprintln!("  Failed crates: {}", failed.join(", "));
+            if !result.blocked.is_empty() {
+                eprintln!(
+                    "=== BLOCKED (path-only deps) ===\n  {}",
+                    result.blocked.join(", ")
+                );
             }
+
             Ok(())
         }
 
         Cmd::Status { path } => {
-            let desc = manifest::describe_manifest(path.as_deref())?;
+            let desc = Api::status(path.as_deref())?;
             match desc {
-                ManifestDescription::Workspace(members) => {
+                cargo_promote::domain::manifest::ManifestDescription::Workspace(members) => {
                     eprintln!("Workspace with {} members:", members.len());
                     for m in &members {
-                        print_crate_line(&m.name, &m.version);
+                        println!("  {} v{}", m.name, m.version);
                     }
                 }
-                ManifestDescription::Single(info) => {
-                    print_crate_line(&info.name, &info.version);
+                cargo_promote::domain::manifest::ManifestDescription::Single(info) => {
+                    println!("  {} v{}", info.name, info.version);
                 }
             }
             Ok(())
         }
 
         Cmd::Bump { path, package } => {
-            let krate = manifest::resolve_crate(path.as_deref(), package.as_deref())?;
-            let cfg = Config::load(path.as_deref().unwrap_or(&cwd))?;
-
-            let branch_cfg = cfg
-                .branch_pipeline
-                .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("branch pipeline not configured in promote.toml"))?;
-
-            cargo_promote::domain::pipeline::BranchPipeline::bump(
-                &krate,
-                &branch_cfg.stages,
-                path.as_deref().unwrap_or(&cwd),
-            )?;
-
-            Ok(())
+            let dir = path.as_deref().unwrap_or(&cwd);
+            let api = Api::with_confirmer(dir, interactive_confirmer)?;
+            api.bump(path.as_deref(), package.as_deref(), &cwd)
         }
 
         Cmd::Branch { path, from, to: _ } => {
-            use cargo_promote::infra::git::local::{GitCliMerger, GitCliPusher};
+            let dir = path.as_deref().unwrap_or(&cwd);
+            let api = Api::with_confirmer(dir, interactive_confirmer)?;
+            api.branch(path.as_deref(), &from, &cwd)
+        }
 
-            let cfg = Config::load(path.as_deref().unwrap_or(&cwd))?;
-            let branch_cfg = cfg
-                .branch_pipeline
-                .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("branch pipeline not configured in promote.toml"))?;
-
+        Cmd::Defer {
+            package,
+            path,
+            from,
+            pipeline,
+            branch,
+            command,
+        } => {
+            let dir = path.as_deref().unwrap_or(&cwd);
+            let api = Api::with_confirmer(dir, interactive_confirmer)?;
             let repo_root = path.as_deref().unwrap_or(&cwd);
-
-            let merger = GitCliMerger {
-                repo_root: repo_root.to_path_buf(),
+            let deferral = if branch {
+                api.defer_branch(
+                    path.as_deref(),
+                    package.as_deref(),
+                    &from,
+                    command,
+                    repo_root,
+                )?
+            } else {
+                api.defer_to(
+                    path.as_deref(),
+                    package.as_deref(),
+                    &from,
+                    pipeline.as_deref(),
+                    command,
+                    repo_root,
+                )?
             };
-            let pusher = GitCliPusher {
-                repo_root: repo_root.to_path_buf(),
-            };
+            eprintln!(
+                "=> deferred {} v{} from '{}' to '{}' [ticket: {}]",
+                deferral.crate_name,
+                deferral.version,
+                deferral.from_stage,
+                deferral.to_stage,
+                deferral.ticket,
+            );
+            Ok(())
+        }
 
-            cargo_promote::domain::pipeline::BranchPipeline::branch(
-                &branch_cfg.stages,
-                &from,
-                &merger,
-                &pusher,
-                repo_root,
-            )?;
+        Cmd::Confirm {
+            ticket,
+            path,
+            reason,
+        } => {
+            let repo_root = path.as_deref().unwrap_or(&cwd);
+            let api = Api::with_confirmer(repo_root, interactive_confirmer)?;
+            let d = api.confirm_deferral(repo_root, &ticket, &reason)?;
+            eprintln!(
+                "=> confirmed {} v{} -> '{}'",
+                d.crate_name, d.version, d.to_stage,
+            );
+            Ok(())
+        }
 
+        Cmd::Reject {
+            ticket,
+            path,
+            reason,
+        } => {
+            let repo_root = path.as_deref().unwrap_or(&cwd);
+            let d = Api::reject_deferral(repo_root, &ticket, &reason)?;
+            eprintln!(
+                "=> rejected {} v{} (was heading to '{}')",
+                d.crate_name, d.version, d.to_stage,
+            );
+            Ok(())
+        }
+
+        Cmd::Deferrals { path, pending } => {
+            let repo_root = path.as_deref().unwrap_or(&cwd);
+            let deferrals = Api::deferrals(repo_root, pending)?;
+            if deferrals.is_empty() {
+                println!("  (no deferrals)");
+            } else {
+                for d in &deferrals {
+                    println!(
+                        "  [{}] {} v{} {} -> {} ({})",
+                        d.ticket,
+                        d.crate_name,
+                        d.version,
+                        d.from_stage,
+                        d.to_stage,
+                        match d.status {
+                            cargo_promote::domain::deferral::DeferralStatus::Pending => "pending",
+                            cargo_promote::domain::deferral::DeferralStatus::Confirmed =>
+                                "confirmed",
+                            cargo_promote::domain::deferral::DeferralStatus::Rejected => "rejected",
+                        },
+                    );
+                }
+            }
             Ok(())
         }
     }
