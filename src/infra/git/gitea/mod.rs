@@ -22,7 +22,7 @@ impl GiteaRegistry {
 impl GiteaRegistry {
     /// Build an Authorization header, handling tokens that already
     /// include the `Bearer ` prefix (as stored in credentials.toml).
-    fn auth_header(token: &str) -> String {
+    pub fn auth_header(token: &str) -> String {
         if token.starts_with("Bearer ") || token.starts_with("bearer ") {
             format!("Authorization: {token}")
         } else {
@@ -31,74 +31,66 @@ impl GiteaRegistry {
     }
 }
 
+impl GiteaRegistry {
+    /// Build an authenticated curl command for the given URL.
+    // qual:allow(iosp) reason: "I/O boundary — builds command with optional auth"
+    fn curl_cmd(
+        &self,
+        url: &str,
+        registry_name: &str,
+        extra_args: &[&str],
+    ) -> Result<Command, PromoteError> {
+        let token = self.token_resolver.resolve(registry_name)?;
+        let mut cmd = Command::new("curl");
+        cmd.args(extra_args);
+        if let Some(ref secret) = token {
+            let header = Self::auth_header(secret.expose_secret());
+            cmd.args(["-H", &header]);
+        }
+        cmd.arg(url);
+        Ok(cmd)
+    }
+
+    fn require_api_url(registry: &Registry) -> Result<&str, PromoteError> {
+        registry
+            .api_url
+            .as_deref()
+            .ok_or_else(|| PromoteError::QueryFailed {
+                registry: registry.name.clone(),
+                reason: "no api_url configured".to_string(),
+            })
+    }
+
+    fn run_curl(cmd: &mut Command, registry_name: &str) -> Result<std::process::Output, PromoteError> {
+        cmd.output().map_err(|e| PromoteError::QueryFailed {
+            registry: registry_name.to_string(),
+            reason: format!("failed to run curl: {e}"),
+        })
+    }
+}
+
 impl RegistryQuery for GiteaRegistry {
+    // qual:allow(iosp) reason: "I/O boundary — runs curl and interprets status"
     fn crate_exists(
         &self,
         registry: &Registry,
         name: &str,
         version: &str,
     ) -> Result<bool, PromoteError> {
-        let api_url = registry
-            .api_url
-            .as_deref()
-            .ok_or_else(|| PromoteError::QueryFailed {
-                registry: registry.name.clone(),
-                reason: "no api_url configured".to_string(),
-            })?;
-
+        let api_url = Self::require_api_url(registry)?;
         let url = format!("{api_url}/{name}/{version}");
-
-        let token = self.token_resolver.resolve(&registry.name)?;
-
-        let mut cmd = Command::new("curl");
-        cmd.args(["-sf", "-o", "/dev/null", "-w", "%{http_code}"]);
-
-        if let Some(ref secret) = token {
-            let header = Self::auth_header(secret.expose_secret());
-            cmd.args(["-H", &header]);
-        }
-
-        cmd.arg(&url);
-
-        let output = cmd.output().map_err(|e| PromoteError::QueryFailed {
-            registry: registry.name.clone(),
-            reason: format!("failed to run curl: {e}"),
-        })?;
-
+        let mut cmd = self.curl_cmd(&url, &registry.name, &["-sf", "-o", "/dev/null", "-w", "%{http_code}"])?;
+        let output = Self::run_curl(&mut cmd, &registry.name)?;
         let status_code = String::from_utf8_lossy(&output.stdout);
         Ok(status_code.trim() == "200")
     }
 
+    // qual:allow(iosp) reason: "I/O boundary — runs curl and parses JSON response"
     fn list_crates(&self, registry: &Registry) -> Result<Vec<CrateInfo>, PromoteError> {
-        let api_url = registry
-            .api_url
-            .as_deref()
-            .ok_or_else(|| PromoteError::QueryFailed {
-                registry: registry.name.clone(),
-                reason: "no api_url configured".to_string(),
-            })?;
-
-        // api_url includes the cargo index base, e.g.
-        // "http://host:port/api/packages/{owner}/cargo"
-        // The crates listing lives at {api_url}/api/v1/crates
+        let api_url = Self::require_api_url(registry)?;
         let url = format!("{api_url}/api/v1/crates");
-
-        let token = self.token_resolver.resolve(&registry.name)?;
-
-        let mut cmd = Command::new("curl");
-        cmd.args(["-sf"]);
-
-        if let Some(ref secret) = token {
-            let header = Self::auth_header(secret.expose_secret());
-            cmd.args(["-H", &header]);
-        }
-
-        cmd.arg(&url);
-
-        let output = cmd.output().map_err(|e| PromoteError::QueryFailed {
-            registry: registry.name.clone(),
-            reason: format!("failed to run curl: {e}"),
-        })?;
+        let mut cmd = self.curl_cmd(&url, &registry.name, &["-sf"])?;
+        let output = Self::run_curl(&mut cmd, &registry.name)?;
 
         if !output.status.success() {
             return Err(PromoteError::QueryFailed {
