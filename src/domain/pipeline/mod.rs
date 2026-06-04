@@ -414,6 +414,175 @@ mod tests {
         assert_eq!(pub_.published(), vec!["staging"]);
     }
 
+    // ── BranchPipeline tests ──────────────────────────────────────
+
+    use crate::domain::traits::{BranchMerger, RemotePusher, Tagger};
+
+    struct MockMerger {
+        called: RefCell<Vec<(String, String)>>,
+    }
+
+    impl MockMerger {
+        fn new() -> Self {
+            Self {
+                called: RefCell::new(Vec::new()),
+            }
+        }
+    }
+
+    impl BranchMerger for MockMerger {
+        fn fast_forward(&self, source: &str, target: &str) -> Result<(), PromoteError> {
+            self.called
+                .borrow_mut()
+                .push((source.to_string(), target.to_string()));
+            Ok(())
+        }
+    }
+
+    struct MockPusher {
+        branches: RefCell<Vec<String>>,
+        tags: RefCell<Vec<String>>,
+    }
+
+    impl MockPusher {
+        fn new() -> Self {
+            Self {
+                branches: RefCell::new(Vec::new()),
+                tags: RefCell::new(Vec::new()),
+            }
+        }
+    }
+
+    impl RemotePusher for MockPusher {
+        fn push_branch(&self, branch: &str) -> Result<(), PromoteError> {
+            self.branches.borrow_mut().push(branch.to_string());
+            Ok(())
+        }
+        fn push_tag(&self, tag: &str) -> Result<(), PromoteError> {
+            self.tags.borrow_mut().push(tag.to_string());
+            Ok(())
+        }
+    }
+
+    struct MockTagger {
+        tags: RefCell<Vec<(String, String)>>,
+    }
+
+    impl MockTagger {
+        fn new() -> Self {
+            Self {
+                tags: RefCell::new(Vec::new()),
+            }
+        }
+    }
+
+    impl Tagger for MockTagger {
+        fn create_tag(&self, name: &str, message: &str) -> Result<(), PromoteError> {
+            self.tags
+                .borrow_mut()
+                .push((name.to_string(), message.to_string()));
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn branch_pipeline_branch_merges_to_next_stage() {
+        // Set up a temp dir with a valid promote.lock
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        // Create minimal source files so hash computes
+        std::fs::write(root.join("Cargo.toml"), "name = \"test\"").unwrap();
+        std::fs::create_dir(root.join("src")).unwrap();
+        std::fs::write(root.join("src/lib.rs"), "fn main() {}").unwrap();
+
+        // Write a promote.lock with the correct hash
+        let hash =
+            crate::domain::promote_lock::PromoteLock::compute_source_hash(root).unwrap();
+        let lock = crate::domain::promote_lock::PromoteLock {
+            version: "0.1.0".to_string(),
+            source_hash: hash,
+            bumped_at: "20260601::120000".to_string(),
+            entered_pipeline: "develop".to_string(),
+        };
+        lock.write(root).unwrap();
+
+        let stages = vec![
+            "develop".to_string(),
+            "staging".to_string(),
+            "main".to_string(),
+        ];
+        let merger = MockMerger::new();
+        let pusher = MockPusher::new();
+
+        BranchPipeline::branch(&stages, "develop", &merger, &pusher, root).unwrap();
+
+        assert_eq!(
+            merger.called.borrow().as_slice(),
+            &[("develop".to_string(), "staging".to_string())]
+        );
+        assert_eq!(pusher.branches.borrow().as_slice(), &["staging"]);
+    }
+
+    #[test]
+    fn branch_pipeline_branch_errors_on_unknown_stage() {
+        let dir = tempfile::tempdir().unwrap();
+        let stages = vec!["develop".to_string(), "main".to_string()];
+        let merger = MockMerger::new();
+        let pusher = MockPusher::new();
+
+        let result =
+            BranchPipeline::branch(&stages, "nonexistent", &merger, &pusher, dir.path());
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().to_string().contains("nonexistent"),
+            "error should mention the unknown stage"
+        );
+    }
+
+    #[test]
+    fn branch_pipeline_branch_errors_on_last_stage() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        std::fs::write(root.join("Cargo.toml"), "name = \"test\"").unwrap();
+        std::fs::create_dir(root.join("src")).unwrap();
+        std::fs::write(root.join("src/lib.rs"), "fn main() {}").unwrap();
+
+        let hash =
+            crate::domain::promote_lock::PromoteLock::compute_source_hash(root).unwrap();
+        let lock = crate::domain::promote_lock::PromoteLock {
+            version: "0.1.0".to_string(),
+            source_hash: hash,
+            bumped_at: "20260601::120000".to_string(),
+            entered_pipeline: "develop".to_string(),
+        };
+        lock.write(root).unwrap();
+
+        let stages = vec!["develop".to_string(), "main".to_string()];
+        let merger = MockMerger::new();
+        let pusher = MockPusher::new();
+
+        let result = BranchPipeline::branch(&stages, "main", &merger, &pusher, root);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("no next stage"));
+    }
+
+    #[test]
+    fn branch_pipeline_publish_creates_and_pushes_tag() {
+        let krate = test_crate();
+        let tagger = MockTagger::new();
+        let pusher = MockPusher::new();
+
+        BranchPipeline::publish(&krate, "main", &tagger, &pusher).unwrap();
+
+        assert_eq!(
+            tagger.tags.borrow().as_slice(),
+            &[("v0.1.0".to_string(), "Release test-crate v0.1.0".to_string())]
+        );
+        assert_eq!(pusher.tags.borrow().as_slice(), &["v0.1.0"]);
+    }
+
     #[test]
     fn promote_next_errors_on_last_stage() {
         let pub_ = RecordingPublisher::new();

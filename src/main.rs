@@ -161,9 +161,18 @@ fn main() -> Result<()> {
             api.bump(path.as_deref(), package.as_deref(), &cwd)
         }
 
-        Cmd::Branch { path, from, to: _ } => {
+        Cmd::Branch {
+            path,
+            from,
+            to,
+            tag,
+        } => {
             let api = api_for(path.as_deref(), &cwd)?;
-            api.branch(path.as_deref(), &from, &cwd)
+            api.branch(path.as_deref(), &from, to.as_deref(), &cwd)?;
+            if tag {
+                api.branch_tag(path.as_deref(), None)?;
+            }
+            Ok(())
         }
 
         Cmd::Defer {

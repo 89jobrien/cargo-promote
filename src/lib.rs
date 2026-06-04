@@ -410,15 +410,53 @@ impl Api {
         Ok(())
     }
 
-    /// Branch from one stage to the next.
-    pub fn branch(&self, path: Option<&Path>, from: &str, cwd: &Path) -> Result<()> {
+    /// Branch from one stage to the next (or to a specific target stage).
+    pub fn branch(
+        &self,
+        path: Option<&Path>,
+        from: &str,
+        to: Option<&str>,
+        cwd: &Path,
+    ) -> Result<()> {
         let branch_cfg = self
             .config
             .branch_pipeline
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("branch pipeline not configured in promote.toml"))?;
         let repo_root = path.unwrap_or(cwd);
-        domain::pipeline::BranchPipeline::branch(&branch_cfg.stages, from, &*self.git, &*self.git, repo_root)?;
+
+        if let Some(target) = to {
+            // Explicit target: build a two-element stages slice for BranchPipeline
+            let stages = vec![from.to_string(), target.to_string()];
+            domain::pipeline::BranchPipeline::branch(
+                &stages, from, &*self.git, &*self.git, repo_root,
+            )?;
+        } else {
+            domain::pipeline::BranchPipeline::branch(
+                &branch_cfg.stages, from, &*self.git, &*self.git, repo_root,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Tag the release branch with a version tag.
+    pub fn branch_tag(
+        &self,
+        path: Option<&Path>,
+        package: Option<&str>,
+    ) -> Result<()> {
+        let krate = manifest::resolve_crate(path, package)?;
+        let branch_cfg = self
+            .config
+            .branch_pipeline
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("branch pipeline not configured in promote.toml"))?;
+        domain::pipeline::BranchPipeline::publish(
+            &krate,
+            &branch_cfg.release_branch,
+            &*self.git,
+            &*self.git,
+        )?;
         Ok(())
     }
 
