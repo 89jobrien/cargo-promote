@@ -201,11 +201,13 @@ adapters:
   `PublishOpts`, `Deferral`, `DeferralKind`, `DeferralStatus`,
   `PromoteLock`, `ManifestDescription`
 - **Ports (traits)**: `Publisher`, `RegistryQuery`, `PipelineRunner`,
-  `BranchMerger`, `RemotePusher`, `Tagger`, `TokenResolver`,
-  `Notifier`, `Forge`
+  `BranchMerger`, `RemotePusher`, `Tagger`, `GitCommitter`,
+  `GitOps` (supertrait), `TokenResolver`, `Notifier`, `Forge`,
+  `DeferralStore`
 - **Adapters**: `CargoPublisher`, `GiteaRegistry`, `GitHubRegistry`,
   `GiteaForge`, `LocalGit` (implements `BranchMerger`,
-  `RemotePusher`, `Tagger`), `CargoTokenResolver`, `SpawnNotifier`
+  `RemotePusher`, `Tagger`, `GitCommitter`),
+  `FsDeferralStore`, `CargoTokenResolver`, `SpawnNotifier`
 - **API**: `Api` facade with `ApiBuilder` for dependency injection
 - **Config**: `Config` with per-package overrides and registry
   auto-discovery from `.cargo/config.toml`
