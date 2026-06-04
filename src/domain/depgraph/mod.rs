@@ -18,13 +18,32 @@ pub struct CrateNode {
 }
 
 /// Scan a directory tree for all Cargo.toml files and build a dep graph.
+///
+/// Parses each manifest exactly once: first pass collects names from
+/// the cached parse, second pass builds nodes from the same values.
 pub fn scan_workspace_tree(root: &Path, skip: &[&str]) -> Result<Vec<CrateNode>> {
     let dirs = scannable_dirs(root, skip)?;
     let all_manifests = resolve_all_manifests(&dirs);
-    let known_names = collect_crate_names(&all_manifests);
-    let nodes = all_manifests
+
+    // Parse each manifest once and cache the result.
+    let parsed: Vec<(PathBuf, toml::Value)> = all_manifests
+        .into_iter()
+        .filter_map(|m| {
+            let doc = parse_manifest(&m)?;
+            Some((m, doc))
+        })
+        .collect();
+
+    // Collect names from cached parses.
+    let known_names: HashSet<String> = parsed
         .iter()
-        .filter_map(|m| build_node(m, &known_names))
+        .filter_map(|(_, doc)| extract_crate_name(doc))
+        .collect();
+
+    // Build nodes from the same cached parses.
+    let nodes = parsed
+        .iter()
+        .filter_map(|(path, doc)| build_node_from_doc(path, doc, &known_names))
         .collect();
     Ok(nodes)
 }
@@ -76,16 +95,48 @@ fn resolve_manifests_via_metadata(dir: &Path) -> Vec<PathBuf> {
     }
 }
 
-fn collect_crate_names(manifests: &[PathBuf]) -> HashSet<String> {
-    manifests
-        .iter()
-        .filter_map(|m| read_crate_name(m))
-        .collect()
-}
 
 fn parse_manifest(path: &Path) -> Option<toml::Value> {
     let content = std::fs::read_to_string(path).ok()?;
     content.parse().ok()
+}
+
+fn extract_crate_name(doc: &toml::Value) -> Option<String> {
+    doc.get("package")
+        .and_then(|p| p.get("name"))
+        .and_then(|n| n.as_str())
+        .map(|s| s.to_string())
+}
+
+fn build_node_from_doc(
+    manifest: &Path,
+    doc: &toml::Value,
+    known_names: &HashSet<String>,
+) -> Option<CrateNode> {
+    let pkg = doc.get("package")?;
+    let name = pkg.get("name").and_then(|n| n.as_str())?;
+    let version = pkg
+        .get("version")
+        .and_then(|v| v.as_str())
+        .unwrap_or("0.0.0");
+
+    let is_xtask = name == "xtask" || name.ends_with("-xtask");
+    let unpublishable = is_xtask
+        || pkg
+            .get("publish")
+            .and_then(|p| p.as_bool())
+            .is_some_and(|b| !b);
+
+    let (internal_deps, path_only_deps) = collect_internal_deps(doc, known_names);
+
+    Some(CrateNode {
+        name: name.to_string(),
+        version: version.to_string(),
+        manifest_path: manifest.to_path_buf(),
+        internal_deps,
+        unpublishable,
+        path_only_deps,
+    })
 }
 
 /// Topological sort of crate nodes. Returns names in publish order.
@@ -143,43 +194,6 @@ pub fn topo_sort(nodes: &[CrateNode]) -> Result<Vec<String>> {
     Ok(order)
 }
 
-fn read_crate_name(manifest: &Path) -> Option<String> {
-    let content = std::fs::read_to_string(manifest).ok()?;
-    let doc: toml::Value = content.parse().ok()?;
-    doc.get("package")
-        .and_then(|p| p.get("name"))
-        .and_then(|n| n.as_str())
-        .map(|s| s.to_string())
-}
-
-fn build_node(manifest: &Path, known_names: &HashSet<String>) -> Option<CrateNode> {
-    let doc = parse_manifest(manifest)?;
-
-    let pkg = doc.get("package")?;
-    let name = pkg.get("name").and_then(|n| n.as_str())?;
-    let version = pkg
-        .get("version")
-        .and_then(|v| v.as_str())
-        .unwrap_or("0.0.0");
-
-    let is_xtask = name == "xtask" || name.ends_with("-xtask");
-    let unpublishable = is_xtask
-        || pkg
-            .get("publish")
-            .and_then(|p| p.as_bool())
-            .is_some_and(|b| !b);
-
-    let (internal_deps, path_only_deps) = collect_internal_deps(&doc, known_names);
-
-    Some(CrateNode {
-        name: name.to_string(),
-        version: version.to_string(),
-        manifest_path: manifest.to_path_buf(),
-        internal_deps,
-        unpublishable,
-        path_only_deps,
-    })
-}
 
 /// Extract internal deps and path-only deps from [dependencies] and [build-dependencies].
 fn collect_internal_deps(

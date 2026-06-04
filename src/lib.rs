@@ -18,6 +18,7 @@ use domain::version;
 use domain::{CrateInfo, CrateRef, Pipeline, PublishOpts, Stage};
 use infra::cargo::CargoPublisher;
 use infra::git::gitea::GiteaRegistry;
+use infra::registry_cache::CachingRegistryQuery;
 use infra::token::CargoTokenResolver;
 
 /// Parameters for `Api::publish`.
@@ -179,8 +180,8 @@ impl Api {
         Ok(Self {
             config,
             engine: Box::new(engine),
-            registry_query: Box::new(GiteaRegistry::new(std::sync::Arc::new(
-                CargoTokenResolver::new(),
+            registry_query: Box::new(CachingRegistryQuery::new(GiteaRegistry::new(
+                std::sync::Arc::new(CargoTokenResolver::new()),
             ))),
             notifier: Box::new(infra::notify::NoopNotifier),
             forge: Box::new(NoopForge),
@@ -201,8 +202,8 @@ impl Api {
         Ok(Self {
             config,
             engine: Box::new(engine),
-            registry_query: Box::new(GiteaRegistry::new(std::sync::Arc::new(
-                CargoTokenResolver::new(),
+            registry_query: Box::new(CachingRegistryQuery::new(GiteaRegistry::new(
+                std::sync::Arc::new(CargoTokenResolver::new()),
             ))),
             notifier: Box::new(infra::notify::SpawnNotifier { command }),
             forge: Box::new(NoopForge),
