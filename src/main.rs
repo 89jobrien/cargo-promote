@@ -1,189 +1,19 @@
+mod cli;
+
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use std::path::PathBuf;
 
-use cargo_promote::Api;
+use cargo_promote::{Api, PromoteParams, PublishAllParams, PublishParams, ShipParams};
+use cli::{interactive_confirmer, Cli, Cmd};
 
-#[derive(Parser)]
-#[command(
-    name = "cargo-promote",
-    about = "Publish crates through configurable promotion pipelines"
-)]
-struct Cli {
-    #[command(subcommand)]
-    cmd: Cmd,
-}
-
-#[derive(Subcommand)]
-enum Cmd {
-    /// Publish a crate to the first stage of a pipeline
-    Publish {
-        #[arg(short, long)]
-        path: Option<PathBuf>,
-        #[arg(short = 'p', long)]
-        package: Option<String>,
-        #[arg(long)]
-        allow_dirty: bool,
-        #[arg(long)]
-        pipeline: Option<String>,
-        #[arg(long)]
-        registry: Option<String>,
-        /// Publish even if the version already exists in the registry
-        #[arg(long)]
-        force: bool,
-    },
-
-    /// Promote a crate from one pipeline stage to the next
-    Promote {
-        #[arg(short = 'p', long)]
-        package: Option<String>,
-        #[arg(short, long)]
-        path: Option<PathBuf>,
-        #[arg(short = 'y', long)]
-        yes: bool,
-        #[arg(long)]
-        dry_run: bool,
-        #[arg(long)]
-        pipeline: Option<String>,
-        #[arg(long)]
-        from: Option<String>,
-    },
-
-    /// Run all stages of a pipeline
-    Ship {
-        #[arg(short = 'p', long)]
-        package: Option<String>,
-        #[arg(short, long)]
-        path: Option<PathBuf>,
-        #[arg(long)]
-        allow_dirty: bool,
-        #[arg(short = 'y', long)]
-        yes: bool,
-        #[arg(long)]
-        pipeline: Option<String>,
-        /// Publish even if versions already exist in registries
-        #[arg(long)]
-        force: bool,
-    },
-
-    /// List crates in a registry
-    List {
-        #[arg(long)]
-        registry: Option<String>,
-    },
-
-    /// Show local crate versions
-    Status {
-        #[arg(short, long)]
-        path: Option<PathBuf>,
-    },
-
-    /// Publish all crates under a directory in dependency order
-    PublishAll {
-        /// Root directory to scan (defaults to ~/dev)
-        #[arg(short, long)]
-        path: Option<PathBuf>,
-
-        /// Allow dirty working directories
-        #[arg(long)]
-        allow_dirty: bool,
-
-        /// Dry run -- show publish order without publishing
-        #[arg(long)]
-        dry_run: bool,
-
-        /// Registry to publish to (defaults to pipeline first stage)
-        #[arg(long)]
-        registry: Option<String>,
-
-        /// Repos to skip (comma-separated)
-        #[arg(
-            long,
-            default_value = "maestro,maestro-feat-minibox-provider,maestro-slides,seaography,langchainx,prusti-dev,hyperdocker-main,sandbox"
-        )]
-        skip: String,
-
-        /// Publish even if versions already exist in registries
-        #[arg(long)]
-        force: bool,
-    },
-
-    /// Bump version and create promote.lock
-    Bump {
-        #[arg(short, long)]
-        path: Option<PathBuf>,
-        #[arg(short = 'p', long)]
-        package: Option<String>,
-    },
-
-    /// Branch from one stage to the next
-    Branch {
-        #[arg(short, long)]
-        path: Option<PathBuf>,
-        #[arg(long)]
-        from: String,
-        #[arg(long)]
-        to: Option<String>,
-    },
-
-    /// Defer promotion to the next stage (provisional, pending confirmation)
-    Defer {
-        #[arg(long)]
-        package: Option<String>,
-        #[arg(long)]
-        path: Option<PathBuf>,
-        #[arg(long)]
-        from: String,
-        #[arg(long)]
-        pipeline: Option<String>,
-        /// Defer a branch pipeline merge instead of a registry publish
-        #[arg(long)]
-        branch: bool,
-        /// Notification command to fire (non-blocking)
-        #[arg(long, num_args = 1..)]
-        command: Vec<String>,
-    },
-
-    /// Confirm a pending deferral
-    Confirm {
-        /// Deferral ticket ID
-        ticket: String,
-        #[arg(short, long)]
-        path: Option<PathBuf>,
-        #[arg(long, default_value = "")]
-        reason: String,
-    },
-
-    /// Reject a pending deferral
-    Reject {
-        /// Deferral ticket ID
-        ticket: String,
-        #[arg(short, long)]
-        path: Option<PathBuf>,
-        #[arg(long, default_value = "")]
-        reason: String,
-    },
-
-    /// List deferrals
-    Deferrals {
-        #[arg(short, long)]
-        path: Option<PathBuf>,
-        /// Show only pending deferrals
-        #[arg(long)]
-        pending: bool,
-    },
+fn api_for(path: Option<&std::path::Path>, cwd: &std::path::Path) -> Result<Api> {
+    Api::with_confirmer(path.unwrap_or(cwd), interactive_confirmer)
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let cwd = std::env::current_dir().context("cannot determine current directory")?;
-
-    let interactive_confirmer = |prompt: &str| -> bool {
-        eprintln!("=> {prompt} [y/N]");
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input).ok();
-        input.trim().eq_ignore_ascii_case("y")
-    };
 
     match cli.cmd {
         Cmd::Publish {
@@ -194,16 +24,15 @@ fn main() -> Result<()> {
             registry,
             force,
         } => {
-            let dir = path.as_deref().unwrap_or(&cwd);
-            let api = Api::with_confirmer(dir, interactive_confirmer)?;
-            api.publish(
-                path.as_deref(),
-                package.as_deref(),
+            let api = api_for(path.as_deref(), &cwd)?;
+            api.publish(&PublishParams {
+                path: path.as_deref(),
+                package: package.as_deref(),
                 allow_dirty,
                 force,
-                pipeline.as_deref(),
-                registry.as_deref(),
-            )
+                pipeline: pipeline.as_deref(),
+                registry: registry.as_deref(),
+            })
         }
 
         Cmd::Promote {
@@ -214,16 +43,15 @@ fn main() -> Result<()> {
             pipeline,
             from,
         } => {
-            let dir = path.as_deref().unwrap_or(&cwd);
-            let api = Api::with_confirmer(dir, interactive_confirmer)?;
-            api.promote(
-                path.as_deref(),
-                package.as_deref(),
+            let api = api_for(path.as_deref(), &cwd)?;
+            api.promote(&PromoteParams {
+                path: path.as_deref(),
+                package: package.as_deref(),
                 yes,
                 dry_run,
-                pipeline.as_deref(),
-                from.as_deref(),
-            )
+                pipeline: pipeline.as_deref(),
+                from: from.as_deref(),
+            })
         }
 
         Cmd::Ship {
@@ -234,20 +62,19 @@ fn main() -> Result<()> {
             pipeline,
             force,
         } => {
-            let dir = path.as_deref().unwrap_or(&cwd);
-            let api = Api::with_confirmer(dir, interactive_confirmer)?;
-            api.ship(
-                path.as_deref(),
-                package.as_deref(),
+            let api = api_for(path.as_deref(), &cwd)?;
+            api.ship(&ShipParams {
+                path: path.as_deref(),
+                package: package.as_deref(),
                 allow_dirty,
                 yes,
                 force,
-                pipeline.as_deref(),
-            )
+                pipeline: pipeline.as_deref(),
+            })
         }
 
         Cmd::List { registry } => {
-            let api = Api::with_confirmer(&cwd, interactive_confirmer)?;
+            let api = api_for(None, &cwd)?;
             let crates = api.list(registry.as_deref())?;
             if crates.is_empty() {
                 println!("  (no crates published)");
@@ -268,20 +95,20 @@ fn main() -> Result<()> {
             skip,
             force,
         } => {
-            let api = Api::with_confirmer(&cwd, interactive_confirmer)?;
+            let api = api_for(None, &cwd)?;
             let root = path.unwrap_or_else(|| {
                 PathBuf::from(std::env::var("HOME").unwrap_or_default()).join("dev")
             });
             let skip_list: Vec<&str> = skip.split(',').map(|s| s.trim()).collect();
 
-            let result = api.publish_all(
-                &root,
+            let result = api.publish_all(&PublishAllParams {
+                root: &root,
                 allow_dirty,
                 dry_run,
                 force,
-                registry.as_deref(),
-                &skip_list,
-            )?;
+                registry: registry.as_deref(),
+                skip: &skip_list,
+            })?;
 
             eprintln!(
                 "=== PUBLISH ORDER ({} crates) ===",
@@ -330,14 +157,12 @@ fn main() -> Result<()> {
         }
 
         Cmd::Bump { path, package } => {
-            let dir = path.as_deref().unwrap_or(&cwd);
-            let api = Api::with_confirmer(dir, interactive_confirmer)?;
+            let api = api_for(path.as_deref(), &cwd)?;
             api.bump(path.as_deref(), package.as_deref(), &cwd)
         }
 
         Cmd::Branch { path, from, to: _ } => {
-            let dir = path.as_deref().unwrap_or(&cwd);
-            let api = Api::with_confirmer(dir, interactive_confirmer)?;
+            let api = api_for(path.as_deref(), &cwd)?;
             api.branch(path.as_deref(), &from, &cwd)
         }
 
@@ -380,7 +205,7 @@ fn main() -> Result<()> {
             reason,
         } => {
             let repo_root = path.as_deref().unwrap_or(&cwd);
-            let api = Api::with_confirmer(repo_root, interactive_confirmer)?;
+            let api = api_for(Some(repo_root), &cwd)?;
             let d = api.confirm_deferral(repo_root, &ticket, &reason)?;
             eprintln!(
                 "=> confirmed {} v{} -> '{}'",
@@ -395,7 +220,8 @@ fn main() -> Result<()> {
             reason,
         } => {
             let repo_root = path.as_deref().unwrap_or(&cwd);
-            let d = Api::reject_deferral(repo_root, &ticket, &reason)?;
+            let api = api_for(Some(repo_root), &cwd)?;
+            let d = api.reject_deferral(&ticket, &reason)?;
             eprintln!(
                 "=> rejected {} v{} (was heading to '{}')",
                 d.crate_name, d.version, d.to_stage,
@@ -405,7 +231,8 @@ fn main() -> Result<()> {
 
         Cmd::Deferrals { path, pending } => {
             let repo_root = path.as_deref().unwrap_or(&cwd);
-            let deferrals = Api::deferrals(repo_root, pending)?;
+            let api = api_for(Some(repo_root), &cwd)?;
+            let deferrals = api.deferrals(pending)?;
             if deferrals.is_empty() {
                 println!("  (no deferrals)");
             } else {

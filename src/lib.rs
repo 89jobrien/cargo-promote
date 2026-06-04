@@ -12,7 +12,7 @@ use domain::deferral::{Deferral, DeferralKind, DeferralStatus};
 use domain::depgraph;
 use domain::manifest::{self, ManifestDescription};
 use domain::pipeline::PipelineEngine;
-use domain::traits::{Forge, NoopForge, Notifier, PipelineRunner, RegistryQuery};
+use domain::traits::{DeferralStore, Forge, NoopForge, Notifier, PipelineRunner, RegistryQuery};
 pub use domain::traits::GitOps;
 use domain::version;
 use domain::{CrateInfo, CrateRef, Pipeline, PublishOpts, Stage};
@@ -87,6 +87,7 @@ pub struct Api {
     notifier: Box<dyn Notifier>,
     forge: Box<dyn Forge>,
     git: Box<dyn GitOps>,
+    deferral_store: Box<dyn DeferralStore>,
 }
 
 /// Builder for `Api` with injectable dependencies.
@@ -99,6 +100,7 @@ pub struct ApiBuilder {
     notifier: Option<Box<dyn Notifier>>,
     forge: Option<Box<dyn Forge>>,
     git: Option<Box<dyn GitOps>>,
+    deferral_store: Option<Box<dyn DeferralStore>>,
 }
 
 // qual:allow reason: "intentional builder pattern — derive_builder not warranted"
@@ -133,6 +135,11 @@ impl ApiBuilder {
         self
     }
 
+    pub fn deferral_store(mut self, store: Box<dyn DeferralStore>) -> Self {
+        self.deferral_store = Some(store);
+        self
+    }
+
     pub fn build(self) -> Result<Api> {
         Ok(Api {
             config: self
@@ -151,6 +158,9 @@ impl ApiBuilder {
             git: self
                 .git
                 .ok_or_else(|| anyhow::anyhow!("git required"))?,
+            deferral_store: self
+                .deferral_store
+                .ok_or_else(|| anyhow::anyhow!("deferral_store required"))?,
         })
     }
 }
@@ -175,6 +185,7 @@ impl Api {
             notifier: Box::new(infra::notify::NoopNotifier),
             forge: Box::new(NoopForge),
             git: Box::new(infra::git::local::LocalGit::new(dir.to_path_buf())),
+            deferral_store: Box::new(infra::deferral::FsDeferralStore::new(dir.to_path_buf())),
         })
     }
 
@@ -196,6 +207,7 @@ impl Api {
             notifier: Box::new(infra::notify::SpawnNotifier { command }),
             forge: Box::new(NoopForge),
             git: Box::new(infra::git::local::LocalGit::new(dir.to_path_buf())),
+            deferral_store: Box::new(infra::deferral::FsDeferralStore::new(dir.to_path_buf())),
         })
     }
 
@@ -465,7 +477,7 @@ impl Api {
             pr_number,
         };
 
-        deferral.write(repo_root)?;
+        self.deferral_store.save(&deferral)?;
         self.notifier.on_deferred(&deferral)?;
         Ok(deferral)
     }
@@ -531,7 +543,7 @@ impl Api {
             pr_number,
         };
 
-        deferral.write(repo_root)?;
+        self.deferral_store.save(&deferral)?;
         self.notifier.on_deferred(&deferral)?;
         Ok(deferral)
     }
@@ -541,13 +553,14 @@ impl Api {
     /// only marked confirmed after the merge succeeds — if the
     /// merge fails, the ticket remains pending.
     // qual:allow(iosp) reason: "integration root — orchestrates validation + merge + confirm"
+    // qual:allow(iosp) reason: "integration root — orchestrates validation + merge + confirm"
     pub fn confirm_deferral(
         &self,
         repo_root: &Path,
         ticket: &str,
         reason: &str,
     ) -> Result<Deferral> {
-        let d = Deferral::read(repo_root, ticket)?;
+        let d = self.deferral_store.load(ticket)?;
         if d.status != DeferralStatus::Pending {
             anyhow::bail!("deferral '{}' is already {:?}", ticket, d.status,);
         }
@@ -584,23 +597,26 @@ impl Api {
         }
 
         // Status update happens after side effects succeed.
-        let d = Deferral::confirm(repo_root, ticket, reason)?;
+        let d = d.into_confirmed(reason)?;
+        self.deferral_store.save(&d)?;
         Ok(d)
     }
 
     /// Reject a pending deferral. No side effects beyond status
     /// update.
-    pub fn reject_deferral(repo_root: &Path, ticket: &str, reason: &str) -> Result<Deferral> {
-        Deferral::reject(repo_root, ticket, reason)
+    pub fn reject_deferral(&self, ticket: &str, reason: &str) -> Result<Deferral> {
+        let d = self.deferral_store.load(ticket)?;
+        let d = d.into_rejected(reason)?;
+        self.deferral_store.save(&d)?;
+        Ok(d)
     }
 
     /// List all deferrals (optionally filtered to pending only).
-    // qual:allow(iosp) reason: "thin delegation with filter flag"
-    pub fn deferrals(repo_root: &Path, pending_only: bool) -> Result<Vec<Deferral>> {
+    pub fn deferrals(&self, pending_only: bool) -> Result<Vec<Deferral>> {
         if pending_only {
-            Deferral::list_pending(repo_root)
+            Ok(self.deferral_store.list_pending()?)
         } else {
-            Deferral::list(repo_root)
+            Ok(self.deferral_store.list_all()?)
         }
     }
 }

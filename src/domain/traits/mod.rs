@@ -129,6 +129,14 @@ pub trait TokenResolver {
     fn resolve(&self, registry_name: &str) -> Result<Option<secrecy::SecretString>, PromoteError>;
 }
 
+/// Port: persist and query deferral tickets.
+pub trait DeferralStore {
+    fn save(&self, deferral: &Deferral) -> Result<(), PromoteError>;
+    fn load(&self, ticket: &str) -> Result<Deferral, PromoteError>;
+    fn list_all(&self) -> Result<Vec<Deferral>, PromoteError>;
+    fn list_pending(&self) -> Result<Vec<Deferral>, PromoteError>;
+}
+
 /// Port: notify external systems about promotion events.
 pub trait Notifier {
     fn on_deferred(&self, deferral: &Deferral) -> Result<(), PromoteError>;
