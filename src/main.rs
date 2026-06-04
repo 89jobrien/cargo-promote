@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use cargo_promote::{Api, PromoteParams, PublishAllParams, PublishParams, ShipParams};
 use cli::{interactive_confirmer, Cli, Cmd};
 
+// TODO(#18): add Doctor subcommand — validate registry connectivity, tokens,
+// branch existence, and promote.toml consistency in one pass
 fn api_for(path: Option<&std::path::Path>, cwd: &std::path::Path) -> Result<Api> {
     Api::with_confirmer(path.unwrap_or(cwd), interactive_confirmer)
 }

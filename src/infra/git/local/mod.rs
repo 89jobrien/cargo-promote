@@ -19,6 +19,8 @@ impl LocalGit {
     }
 
     /// Run a git command and return an error with `err_msg` on failure.
+    // TODO: capture stderr in the error message — currently only returns the static err_msg,
+    // making it hard to diagnose why a git operation failed (e.g., merge conflict details)
     fn run(&self, args: &[&str], err_msg: &str) -> Result<(), PromoteError> {
         let status = Command::new("git")
             .args(args)
@@ -71,6 +73,8 @@ impl BranchMerger for LocalGit {
             .current_dir(self.path())
             .output();
 
+        // TODO: restore original branch after merge — currently leaves the working tree
+        // on the target branch, which is surprising if the user was on a different branch
         self.run(
             &["checkout", target],
             &format!("failed to checkout branch '{target}'"),

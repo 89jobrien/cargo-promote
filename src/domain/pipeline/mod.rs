@@ -154,6 +154,7 @@ pub struct BranchPipeline;
 
 impl BranchPipeline {
     /// Run a bump operation (version bump + promote.lock creation + commit/push).
+    // TODO(#20): support workspace-wide bump — bump all publishable members atomically
     pub fn bump(
         krate: &CrateRef,
         stages: &[String],
@@ -191,6 +192,9 @@ impl BranchPipeline {
     }
 
     /// Branch from one stage to the next (with hash verification).
+    // TODO(#9): add branch_all() that iterates all consecutive stage pairs
+    // TODO(#13): re-verify promote.lock hash after each merge hop, not just the first
+    // TODO(#15): record pre-merge target HEAD SHA for rollback support
     // qual:allow(iosp) reason: "integration root — orchestrates verify + merge + push"
     pub fn branch(
         stages: &[String],
@@ -230,6 +234,8 @@ impl BranchPipeline {
     }
 
     /// Publish (create git tag on release branch).
+    // TODO(#17): generate changelog from git log between previous tag and HEAD,
+    // pass as body to Forge::create_release()
     pub fn publish(
         krate: &CrateRef,
         _release_branch: &str,

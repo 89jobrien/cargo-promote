@@ -7,6 +7,9 @@ use std::path::{Path, PathBuf};
 const PROMOTE_LOCK_FILENAME: &str = "promote.lock";
 
 /// The promote.lock file — prevents code from changing mid-pipeline.
+// TODO(#11): expose verify_hash as a standalone CLI command for CI gates
+// TODO(#20): extend hash to cover all workspace members, not just cwd src/
+// qual:allow(srp) reason: "cohesive type — static hash methods + instance persistence are complementary"
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromoteLock {
     /// Version that was bumped.

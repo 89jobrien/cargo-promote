@@ -190,6 +190,10 @@ impl Api {
         })
     }
 
+    // TODO: with_confirmer and with_notifier duplicate adapter wiring — consolidate
+    // into a single constructor or use ApiBuilder internally (#18 doctor could benefit
+    // from the same adapter set without re-creating it)
+
     /// Build with default adapters, custom confirmer, and a
     /// notification command.
     pub fn with_notifier(
@@ -309,11 +313,13 @@ impl Api {
     }
 
     /// Describe local crate versions.
+    // TODO(#10): add remote comparison — query each registry and show local vs remote versions
     pub fn status(path: Option<&Path>) -> Result<ManifestDescription> {
         manifest::describe_manifest(path)
     }
 
     /// Publish all crates under a directory in dependency order.
+    // TODO(#16): publish independent crates at the same topo depth concurrently
     pub fn publish_all(&self, params: &PublishAllParams<'_>) -> Result<PublishAllResult> {
         let nodes = depgraph::scan_workspace_tree(params.root, params.skip)?;
         let publishable: Vec<_> = nodes.iter().filter(|n| !n.unpublishable).collect();
@@ -425,8 +431,10 @@ impl Api {
             .ok_or_else(|| anyhow::anyhow!("branch pipeline not configured in promote.toml"))?;
         let repo_root = path.unwrap_or(cwd);
 
+        // TODO(#12): add dry_run parameter — print planned merge without executing
         if let Some(target) = to {
             // Explicit target: build a two-element stages slice for BranchPipeline
+            // TODO(#13): validate that `target` exists in branch_cfg.stages
             let stages = vec![from.to_string(), target.to_string()];
             domain::pipeline::BranchPipeline::branch(
                 &stages, from, &*self.git, &*self.git, repo_root,
@@ -592,7 +600,7 @@ impl Api {
     /// only marked confirmed after the merge succeeds — if the
     /// merge fails, the ticket remains pending.
     // qual:allow(iosp) reason: "integration root — orchestrates validation + merge + confirm"
-    // qual:allow(iosp) reason: "integration root — orchestrates validation + merge + confirm"
+    // TODO(#19): fire on_confirmed notification/webhook after successful confirm
     pub fn confirm_deferral(
         &self,
         repo_root: &Path,
