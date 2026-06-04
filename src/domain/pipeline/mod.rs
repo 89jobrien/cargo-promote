@@ -1,4 +1,4 @@
-use super::traits::{PipelineRunner, Publisher, RegistryQuery};
+use super::traits::{GitCommitter, PipelineRunner, Publisher, RegistryQuery};
 use super::{CrateRef, Pipeline, PromoteError, PublishOpts, Stage};
 
 /// Drives a crate through pipeline stages.
@@ -19,6 +19,7 @@ impl<P: Publisher> PipelineEngine<P, NullRegistryQuery> {
 }
 
 impl<P: Publisher, Q: RegistryQuery> PipelineEngine<P, Q> {
+    /// Construct with an explicit registry query (used by conformance tests).
     pub fn with_query(
         publisher: P,
         registry_query: Q,
@@ -39,8 +40,8 @@ impl<P: Publisher, Q: RegistryQuery> PipelineEngine<P, Q> {
         opts: &PublishOpts,
     ) -> Result<(), PromoteError> {
         // Skip-if-already-published guard
-        if !opts.force {
-            if let Ok(true) =
+        if !opts.force
+            && let Ok(true) =
                 self.registry_query
                     .crate_exists(&stage.registry, &krate.name, &krate.version)
             {
@@ -50,7 +51,6 @@ impl<P: Publisher, Q: RegistryQuery> PipelineEngine<P, Q> {
                 );
                 return Ok(());
             }
-        }
 
         if stage.registry.confirm && !opts.skip_confirm && !opts.dry_run {
             let prompt = format!(
@@ -158,7 +158,7 @@ impl BranchPipeline {
         krate: &CrateRef,
         stages: &[String],
         repo_path: &std::path::Path,
-        git: &crate::infra::git::local::LocalGit,
+        git: &dyn GitCommitter,
     ) -> Result<(), PromoteError> {
         use crate::domain::promote_lock::PromoteLock;
 

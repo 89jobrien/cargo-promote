@@ -1,54 +1,54 @@
 project: cargo-promote
 id: cargo-p
-updated: 2026-05-31
+updated: 2026-06-04
 items:
-  - id: CP-001
-    doob_uuid: null
-    name: null
-    priority: P2
-    status: open
-    title: Expose promotion pipeline as a Rust library API
-    description: |
-      cargo-promote is currently CLI-only. A stable lib surface would allow downstream crates (e.g. release orchestrators) to drive pipelines programmatically. The promote! macro (docs/ideas.md) depends on this.
-    files:
-      - src/lib.rs
-      - docs/ideas.md
-    completed: null
-    extra: []
-  - id: CP-002
-    doob_uuid: null
-    name: null
-    priority: P2
-    status: open
-    title: Expose Tailscale funnel / public endpoint for cratebox
-    description: |
-      GitHub Actions release workflows are blocked because the Gitea registry is Tailscale-only. Expose via Tailscale funnel or Caddy reverse proxy to re-enable CI-driven publishes.
-    files:
-      - CLAUDE.md
-    completed: null
-    extra: []
+- id: CP-001
+  doob_uuid: null
+  name: null
+  priority: P2
+  status: open
+  title: Expose promotion pipeline as a Rust library API
+  description: |
+    cargo-promote is currently CLI-only. A stable lib surface would allow downstream crates (e.g. release orchestrators) to drive pipelines programmatically. The promote! macro (docs/ideas.md) depends on this.
+  files:
+  - src/lib.rs
+  - docs/ideas.md
+  completed: null
+  extra: []
+- id: CP-002
+  doob_uuid: null
+  name: null
+  priority: P2
+  status: open
+  title: Expose Tailscale funnel / public endpoint for cratebox
+  description: |
+    GitHub Actions release workflows are blocked because the Gitea registry is Tailscale-only. Expose via Tailscale funnel or Caddy reverse proxy to re-enable CI-driven publishes.
+  files:
+  - CLAUDE.md
+  completed: null
+  extra: []
 log:
-  - date: 20260531::190558
-    summary: "Session handoff: CP-003 complete, updated HANDOFF, state file, .gitignore patterns"
-    commits: []
-    session: 6
-  - date: 20260531::185800
-    summary: "Implemented branch promotion pipeline: PromoteLock, BranchMerger/RemotePusher/Tagger ports, GitCli adapters, BranchPipeline orchestrator, bump/branch commands. All 53 tests passing."
-    commits: []
-    session: 5
-  - date: 20260531::185414
-    summary: Designed branch promotion pipeline, approved design doc, updated default stages to develop/staging/production
-    commits: []
-    session: 4
-  - date: 20260531::173329
-    summary: Added autobump config, validated promotion pipeline, renamed registry to cratebox, set up sparkfile CI
-    commits: []
-    session: 3
-  - date: 20260531::000000
-    summary: Added publish-all with topological dep ordering
-    commits: []
-    session: 2
-  - date: 20260530::000000
-    summary: Scaffolded cargo-promote CLI and minibox registry infra
-    commits: []
-    session: 1
+- date: 20260531::190558
+  summary: 'Session handoff: CP-003 complete, updated HANDOFF, state file, .gitignore patterns'
+  commits: []
+  session: 6
+- date: 20260531::185800
+  summary: 'Implemented branch promotion pipeline: PromoteLock, BranchMerger/RemotePusher/Tagger ports, GitCli adapters, BranchPipeline orchestrator, bump/branch commands. All 53 tests passing.'
+  commits: []
+  session: 5
+- date: 20260531::185414
+  summary: Designed branch promotion pipeline, approved design doc, updated default stages to develop/staging/production
+  commits: []
+  session: 4
+- date: 20260531::173329
+  summary: Added autobump config, validated promotion pipeline, renamed registry to cratebox, set up sparkfile CI
+  commits: []
+  session: 3
+- date: 20260531::000000
+  summary: Added publish-all with topological dep ordering
+  commits: []
+  session: 2
+- date: 20260530::000000
+  summary: Scaffolded cargo-promote CLI and minibox registry infra
+  commits: []
+  session: 1

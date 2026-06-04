@@ -1,9 +1,10 @@
 use crate::domain::PromoteError;
-use crate::domain::traits::{BranchMerger, RemotePusher, Tagger};
+use crate::domain::traits::{BranchMerger, GitCommitter, RemotePusher, Tagger};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Adapter: local git operations via the git CLI.
+// qual:allow(srp) reason: "single-field struct implementing multiple git trait facets by design"
 pub struct LocalGit {
     pub repo_root: PathBuf,
 }
@@ -45,6 +46,20 @@ impl LocalGit {
     /// Push the current HEAD to origin.
     pub fn push_head(&self) -> Result<(), PromoteError> {
         self.run(&["push", "origin", "HEAD"], "git push HEAD failed")
+    }
+}
+
+impl GitCommitter for LocalGit {
+    fn stage(&self, files: &[&str]) -> Result<(), PromoteError> {
+        LocalGit::stage(self, files)
+    }
+
+    fn commit(&self, message: &str) -> Result<(), PromoteError> {
+        LocalGit::commit(self, message)
+    }
+
+    fn push_head(&self) -> Result<(), PromoteError> {
+        LocalGit::push_head(self)
     }
 }
 

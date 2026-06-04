@@ -13,11 +13,56 @@ use domain::depgraph;
 use domain::manifest::{self, ManifestDescription};
 use domain::pipeline::PipelineEngine;
 use domain::traits::{Forge, NoopForge, Notifier, PipelineRunner, RegistryQuery};
+pub use domain::traits::GitOps;
 use domain::version;
 use domain::{CrateInfo, CrateRef, Pipeline, PublishOpts, Stage};
 use infra::cargo::CargoPublisher;
 use infra::git::gitea::GiteaRegistry;
 use infra::token::CargoTokenResolver;
+
+/// Parameters for `Api::publish`.
+#[derive(Debug, Default)]
+pub struct PublishParams<'a> {
+    pub path: Option<&'a Path>,
+    pub package: Option<&'a str>,
+    pub allow_dirty: bool,
+    pub force: bool,
+    pub pipeline: Option<&'a str>,
+    pub registry: Option<&'a str>,
+}
+
+/// Parameters for `Api::promote`.
+#[derive(Debug, Default)]
+pub struct PromoteParams<'a> {
+    pub path: Option<&'a Path>,
+    pub package: Option<&'a str>,
+    pub yes: bool,
+    pub dry_run: bool,
+    pub pipeline: Option<&'a str>,
+    pub from: Option<&'a str>,
+}
+
+/// Parameters for `Api::ship`.
+#[derive(Debug, Default)]
+pub struct ShipParams<'a> {
+    pub path: Option<&'a Path>,
+    pub package: Option<&'a str>,
+    pub allow_dirty: bool,
+    pub yes: bool,
+    pub force: bool,
+    pub pipeline: Option<&'a str>,
+}
+
+/// Parameters for `Api::publish_all`.
+#[derive(Debug)]
+pub struct PublishAllParams<'a> {
+    pub root: &'a Path,
+    pub allow_dirty: bool,
+    pub dry_run: bool,
+    pub force: bool,
+    pub registry: Option<&'a str>,
+    pub skip: &'a [&'a str],
+}
 
 /// If autobump is configured, bump the manifest version and return an
 /// updated CrateRef.
@@ -41,17 +86,22 @@ pub struct Api {
     registry_query: Box<dyn RegistryQuery>,
     notifier: Box<dyn Notifier>,
     forge: Box<dyn Forge>,
+    git: Box<dyn GitOps>,
 }
 
 /// Builder for `Api` with injectable dependencies.
+// qual:allow reason: "intentional builder pattern — derive_builder adds unnecessary dep"
+#[derive(Default)]
 pub struct ApiBuilder {
     config: Option<Config>,
     engine: Option<Box<dyn PipelineRunner>>,
     registry_query: Option<Box<dyn RegistryQuery>>,
     notifier: Option<Box<dyn Notifier>>,
     forge: Option<Box<dyn Forge>>,
+    git: Option<Box<dyn GitOps>>,
 }
 
+// qual:allow reason: "intentional builder pattern — derive_builder not warranted"
 impl ApiBuilder {
     pub fn config(mut self, config: Config) -> Self {
         self.config = Some(config);
@@ -78,6 +128,11 @@ impl ApiBuilder {
         self
     }
 
+    pub fn git(mut self, git: Box<dyn GitOps>) -> Self {
+        self.git = Some(git);
+        self
+    }
+
     pub fn build(self) -> Result<Api> {
         Ok(Api {
             config: self
@@ -93,6 +148,9 @@ impl ApiBuilder {
                 .notifier
                 .ok_or_else(|| anyhow::anyhow!("notifier required"))?,
             forge: self.forge.unwrap_or_else(|| Box::new(NoopForge)),
+            git: self
+                .git
+                .ok_or_else(|| anyhow::anyhow!("git required"))?,
         })
     }
 }
@@ -116,6 +174,7 @@ impl Api {
             ))),
             notifier: Box::new(infra::notify::NoopNotifier),
             forge: Box::new(NoopForge),
+            git: Box::new(infra::git::local::LocalGit::new(dir.to_path_buf())),
         })
     }
 
@@ -136,18 +195,13 @@ impl Api {
             ))),
             notifier: Box::new(infra::notify::SpawnNotifier { command }),
             forge: Box::new(NoopForge),
+            git: Box::new(infra::git::local::LocalGit::new(dir.to_path_buf())),
         })
     }
 
     /// Return a builder for full dependency injection.
     pub fn builder() -> ApiBuilder {
-        ApiBuilder {
-            config: None,
-            engine: None,
-            registry_query: None,
-            notifier: None,
-            forge: None,
-        }
+        ApiBuilder::default()
     }
 
     /// Access the loaded configuration.
@@ -157,6 +211,16 @@ impl Api {
 
     // -- pipeline helpers --
 
+    /// Best-effort PR creation. Returns `None` if the forge is a noop or
+    /// the call fails (we never want a forge error to block a deferral).
+    fn try_create_pr(&self, title: &str, body: &str, head: &str, base: &str) -> Option<u64> {
+        match self.forge.create_pr(title, body, head, base) {
+            Ok(0) => None,
+            Ok(n) => Some(n),
+            Err(_) => None,
+        }
+    }
+
     fn resolve_pipeline(&self, name: Option<&str>) -> Result<&Pipeline> {
         self.config
             .pipeline(name)
@@ -165,24 +229,16 @@ impl Api {
 
     /// Publish a crate to the first stage of a pipeline (or a named
     /// registry).
-    pub fn publish(
-        &self,
-        path: Option<&Path>,
-        package: Option<&str>,
-        allow_dirty: bool,
-        force: bool,
-        pipeline: Option<&str>,
-        registry: Option<&str>,
-    ) -> Result<()> {
-        let krate = manifest::resolve_crate(path, package)?;
+    pub fn publish(&self, params: &PublishParams<'_>) -> Result<()> {
+        let krate = manifest::resolve_crate(params.path, params.package)?;
         let krate = maybe_autobump(krate, &self.config)?;
         let opts = PublishOpts {
-            allow_dirty,
-            force,
+            allow_dirty: params.allow_dirty,
+            force: params.force,
             ..Default::default()
         };
 
-        if let Some(reg_name) = registry {
+        if let Some(reg_name) = params.registry {
             let reg = self
                 .config
                 .registry(reg_name)
@@ -192,7 +248,7 @@ impl Api {
             };
             self.engine.run_stage(&krate, &stage, &opts)?;
         } else {
-            let pl = self.resolve_pipeline(pipeline)?;
+            let pl = self.resolve_pipeline(params.pipeline)?;
             let first = pl.stages.first().context("pipeline has no stages")?;
             self.engine.run_stage(&krate, first, &opts)?;
         }
@@ -200,46 +256,30 @@ impl Api {
     }
 
     /// Promote a crate from one pipeline stage to the next.
-    pub fn promote(
-        &self,
-        path: Option<&Path>,
-        package: Option<&str>,
-        yes: bool,
-        dry_run: bool,
-        pipeline: Option<&str>,
-        from: Option<&str>,
-    ) -> Result<()> {
-        let krate = manifest::resolve_crate(path, package)?;
+    pub fn promote(&self, params: &PromoteParams<'_>) -> Result<()> {
+        let krate = manifest::resolve_crate(params.path, params.package)?;
         let opts = PublishOpts {
-            skip_confirm: yes,
-            dry_run,
+            skip_confirm: params.yes,
+            dry_run: params.dry_run,
             ..Default::default()
         };
-        let pl = self.resolve_pipeline(pipeline)?;
-        let from_stage = from.unwrap_or_else(|| &pl.stages[0].registry.name);
+        let pl = self.resolve_pipeline(params.pipeline)?;
+        let from_stage = params.from.unwrap_or_else(|| &pl.stages[0].registry.name);
         self.engine.promote_next(&krate, pl, from_stage, &opts)?;
         Ok(())
     }
 
     /// Run all stages of a pipeline sequentially.
-    pub fn ship(
-        &self,
-        path: Option<&Path>,
-        package: Option<&str>,
-        allow_dirty: bool,
-        yes: bool,
-        force: bool,
-        pipeline: Option<&str>,
-    ) -> Result<()> {
-        let krate = manifest::resolve_crate(path, package)?;
+    pub fn ship(&self, params: &ShipParams<'_>) -> Result<()> {
+        let krate = manifest::resolve_crate(params.path, params.package)?;
         let krate = maybe_autobump(krate, &self.config)?;
         let opts = PublishOpts {
-            allow_dirty,
-            skip_confirm: yes,
-            force,
+            allow_dirty: params.allow_dirty,
+            skip_confirm: params.yes,
+            force: params.force,
             ..Default::default()
         };
-        let pl = self.resolve_pipeline(pipeline)?;
+        let pl = self.resolve_pipeline(params.pipeline)?;
         self.engine.run_full(&krate, pl, &opts)?;
         Ok(())
     }
@@ -261,16 +301,8 @@ impl Api {
     }
 
     /// Publish all crates under a directory in dependency order.
-    pub fn publish_all(
-        &self,
-        root: &Path,
-        allow_dirty: bool,
-        dry_run: bool,
-        force: bool,
-        registry: Option<&str>,
-        skip: &[&str],
-    ) -> Result<PublishAllResult> {
-        let nodes = depgraph::scan_workspace_tree(root, skip)?;
+    pub fn publish_all(&self, params: &PublishAllParams<'_>) -> Result<PublishAllResult> {
+        let nodes = depgraph::scan_workspace_tree(params.root, params.skip)?;
         let publishable: Vec<_> = nodes.iter().filter(|n| !n.unpublishable).collect();
         let order =
             depgraph::topo_sort(&publishable.iter().map(|n| (*n).clone()).collect::<Vec<_>>())?;
@@ -300,16 +332,15 @@ impl Api {
 
         let blocked_names: Vec<String> = blocked.iter().map(|n| n.name.clone()).collect();
 
-        if dry_run {
+        if params.dry_run {
             return Ok(PublishAllResult {
                 publish_order,
-                ok: 0,
-                failed: vec![],
                 blocked: blocked_names,
+                ..Default::default()
             });
         }
 
-        let reg_name = registry.unwrap_or("cratebox");
+        let reg_name = params.registry.unwrap_or("cratebox");
         let reg = self
             .config
             .registry(reg_name)
@@ -318,9 +349,9 @@ impl Api {
             registry: reg.clone(),
         };
         let opts = PublishOpts {
-            allow_dirty,
+            allow_dirty: params.allow_dirty,
             skip_confirm: true,
-            force,
+            force: params.force,
             ..Default::default()
         };
 
@@ -362,8 +393,7 @@ impl Api {
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("branch pipeline not configured in promote.toml"))?;
         let repo_path = path.unwrap_or(cwd);
-        let git = infra::git::local::LocalGit::new(repo_path.to_path_buf());
-        domain::pipeline::BranchPipeline::bump(&krate, &branch_cfg.stages, repo_path, &git)?;
+        domain::pipeline::BranchPipeline::bump(&krate, &branch_cfg.stages, repo_path, &*self.git)?;
         Ok(())
     }
 
@@ -375,8 +405,7 @@ impl Api {
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("branch pipeline not configured in promote.toml"))?;
         let repo_root = path.unwrap_or(cwd);
-        let git = infra::git::local::LocalGit::new(repo_root.to_path_buf());
-        domain::pipeline::BranchPipeline::branch(&branch_cfg.stages, from, &git, &git, repo_root)?;
+        domain::pipeline::BranchPipeline::branch(&branch_cfg.stages, from, &*self.git, &*self.git, repo_root)?;
         Ok(())
     }
 
@@ -384,6 +413,7 @@ impl Api {
     ///
     /// Creates a pending deferral ticket and fires a notification.
     /// The promotion is provisional until confirmed or rejected.
+    // qual:allow reason: "Deferral struct literal — fields are meaningful, not boilerplate"
     pub fn defer_to(
         &self,
         path: Option<&Path>,
@@ -410,7 +440,7 @@ impl Api {
         let ticket = Deferral::ticket_id(&krate.name);
         let now = chrono::Local::now();
 
-        let pr_number = match self.forge.create_pr(
+        let pr_number = self.try_create_pr(
             &format!(
                 "promote: {} v{} {} -> {}",
                 krate.name, krate.version, from, to_stage.registry.name
@@ -418,11 +448,7 @@ impl Api {
             &format!("Deferred promotion ticket: {ticket}"),
             from,
             &to_stage.registry.name,
-        ) {
-            Ok(0) => None, // NoopForge returns 0
-            Ok(n) => Some(n),
-            Err(_) => None, // Best-effort; don't fail defer on forge error
-        };
+        );
 
         let deferral = Deferral {
             ticket: ticket.clone(),
@@ -448,6 +474,7 @@ impl Api {
     /// next). Verifies the promote.lock hash before creating the
     /// ticket.
     // qual:allow(iosp) reason: "integration root — orchestrates validation + deferral"
+    // qual:allow reason: "Deferral struct literal — fields are meaningful, not boilerplate"
     pub fn defer_branch(
         &self,
         path: Option<&Path>,
@@ -479,7 +506,7 @@ impl Api {
         let ticket = Deferral::ticket_id(&krate.name);
         let now = chrono::Local::now();
 
-        let pr_number = match self.forge.create_pr(
+        let pr_number = self.try_create_pr(
             &format!(
                 "promote: {} v{} branch {} -> {}",
                 krate.name, krate.version, from, to_stage
@@ -487,11 +514,7 @@ impl Api {
             &format!("Deferred branch promotion ticket: {ticket}"),
             from,
             to_stage,
-        ) {
-            Ok(0) => None,
-            Ok(n) => Some(n),
-            Err(_) => None,
-        };
+        );
 
         let deferral = Deferral {
             ticket,
@@ -539,14 +562,12 @@ impl Api {
             let lock = domain::promote_lock::PromoteLock::read(repo_root)?;
             lock.verify_hash(repo_root)?;
 
-            let git = infra::git::local::LocalGit::new(repo_root.to_path_buf());
-
             // Merge first — only mark confirmed if this succeeds.
             domain::pipeline::BranchPipeline::branch(
                 &branch_cfg.stages,
                 &d.from_stage,
-                &git,
-                &git,
+                &*self.git,
+                &*self.git,
                 repo_root,
             )?;
 
@@ -585,7 +606,7 @@ impl Api {
 }
 
 /// Result of a `publish_all` operation.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct PublishAllResult {
     /// Crates in topological publish order.
     pub publish_order: Vec<String>,

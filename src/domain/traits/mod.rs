@@ -75,6 +75,30 @@ impl<T: Tagger> Tagger for &T {
     }
 }
 
+/// Port: stage, commit, and push changes to a local repository.
+pub trait GitCommitter {
+    fn stage(&self, files: &[&str]) -> Result<(), PromoteError>;
+    fn commit(&self, message: &str) -> Result<(), PromoteError>;
+    fn push_head(&self) -> Result<(), PromoteError>;
+}
+
+impl<T: GitCommitter> GitCommitter for &T {
+    fn stage(&self, files: &[&str]) -> Result<(), PromoteError> {
+        (**self).stage(files)
+    }
+    fn commit(&self, message: &str) -> Result<(), PromoteError> {
+        (**self).commit(message)
+    }
+    fn push_head(&self) -> Result<(), PromoteError> {
+        (**self).push_head()
+    }
+}
+
+/// Composite port: all local git operations needed by the pipeline.
+pub trait GitOps: BranchMerger + RemotePusher + Tagger + GitCommitter {}
+
+impl<T: BranchMerger + RemotePusher + Tagger + GitCommitter> GitOps for T {}
+
 /// Port: drive a crate through pipeline stages.
 pub trait PipelineRunner {
     fn run_stage(
