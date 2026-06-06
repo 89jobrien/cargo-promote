@@ -55,7 +55,6 @@ impl DeferralStore for FsDeferralStore {
             .map_err(PromoteError::Other)
     }
 
-    // qual:allow(iosp) reason: "I/O boundary — reads dir then parses files"
     fn list_all(&self) -> Result<Vec<Deferral>, PromoteError> {
         let dir = self.deferrals_dir();
         if !dir.exists() {

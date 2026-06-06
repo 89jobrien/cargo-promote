@@ -21,6 +21,7 @@ impl GiteaForge {
         }
     }
 
+    // qual:allow(srp) reason: "URL builder helper — used by all Forge methods"
     fn api_base(&self) -> String {
         format!(
             "{}/api/v1/repos/{}/{}",
@@ -28,6 +29,7 @@ impl GiteaForge {
         )
     }
 
+    // qual:allow(srp) reason: "auth helper — used by all Forge methods"
     fn auth_header(&self) -> String {
         format!("token {}", self.token.expose_secret())
     }

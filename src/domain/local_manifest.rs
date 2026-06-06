@@ -44,6 +44,7 @@ impl LocalManifest {
     }
 
     /// Set the `[package].version` to the given semver version.
+    // qual:allow(srp) reason: "single-line setter — nested indexing is idiomatic toml_edit"
     pub fn set_package_version(&mut self, version: &semver::Version) {
         self.data["package"]["version"] = toml_edit::value(version.to_string());
     }
@@ -84,6 +85,7 @@ impl LocalManifest {
     }
 
     /// Set `[workspace.package].version`.
+    // qual:allow(srp) reason: "single-line setter — nested indexing is idiomatic toml_edit"
     pub fn set_workspace_version(&mut self, version: &semver::Version) {
         self.data["workspace"]["package"]["version"] = toml_edit::value(version.to_string());
     }
