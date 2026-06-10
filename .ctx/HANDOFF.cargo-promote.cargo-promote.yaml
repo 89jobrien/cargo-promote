@@ -1,6 +1,6 @@
 project: cargo-promote
 id: cargo-p
-updated: 2026-06-04
+updated: 20260610.072040
 items:
 - id: CP-001
   doob_uuid: null
@@ -9,7 +9,9 @@ items:
   status: open
   title: Expose promotion pipeline as a Rust library API
   description: |
-    cargo-promote is currently CLI-only. A stable lib surface would allow downstream crates (e.g. release orchestrators) to drive pipelines programmatically. The promote! macro (docs/ideas.md) depends on this.
+    cargo-promote is currently CLI-only. A stable lib surface would allow downstream crates
+    (e.g. release orchestrators) to drive pipelines programmatically. The promote! macro
+    (docs/ideas.md) depends on this.
   files:
   - src/lib.rs
   - docs/ideas.md
@@ -22,12 +24,37 @@ items:
   status: open
   title: Expose Tailscale funnel / public endpoint for cratebox
   description: |
-    GitHub Actions release workflows are blocked because the Gitea registry is Tailscale-only. Expose via Tailscale funnel or Caddy reverse proxy to re-enable CI-driven publishes.
+    GitHub Actions release workflows are blocked because the Gitea registry is
+    Tailscale-only. Expose via Tailscale funnel or Caddy reverse proxy to re-enable
+    CI-driven publishes.
   files:
   - CLAUDE.md
   completed: null
   extra: []
+- id: CP-003
+  doob_uuid: null
+  name: null
+  priority: P1
+  status: open
+  title: Add GitHub Actions CI workflow
+  description: |
+    No .github/workflows/ directory exists. CI is not configured. Need at minimum a
+    ci.yml with cargo check, clippy, and test gates on push/PR to develop and main.
+  files:
+  - .github/workflows/ci.yml
+  completed: null
+  extra: []
 log:
+- date: 20260610::072040
+  summary: Added ci-promote subcommand (FF-merge develop→main, rail patch bump, push tags); identified missing CI workflows
+  commits:
+  - sha: 17ed438248e544b49c694aeb6e23122dfac588b1
+    branch: develop
+  - sha: 203930741e21176dbf92103a1870ae34dab7af3f
+    branch: develop
+  - sha: b9e44ed3aae3591ebd0bab1261f772b1f1b7d4dd
+    branch: develop
+  session: 7
 - date: 20260531::190558
   summary: 'Session handoff: CP-003 complete, updated HANDOFF, state file, .gitignore patterns'
   commits: []
