@@ -1,5 +1,5 @@
 use crate::domain::PromoteError;
-use crate::domain::traits::{BranchMerger, GitCommitter, RemotePusher, Tagger};
+use crate::domain::traits::{BranchMerger, CiBranchPromoter, FfStatus, GitCommitter, RemotePusher, Tagger};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -16,6 +16,19 @@ impl LocalGit {
 
     fn path(&self) -> &Path {
         &self.repo_root
+    }
+
+    /// Run a git command, capture stdout, return trimmed output or error.
+    fn run_output(&self, args: &[&str], err_msg: &str) -> Result<String, PromoteError> {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(self.path())
+            .output()
+            .map_err(|e| PromoteError::Other(e.into()))?;
+        if !output.status.success() {
+            return Err(PromoteError::Other(anyhow::anyhow!("{err_msg}")));
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
 
     /// Run a git command and return an error with `err_msg` on failure.
@@ -98,6 +111,71 @@ impl RemotePusher for LocalGit {
         self.run(
             &["push", "origin", tag],
             &format!("failed to push tag '{tag}'"),
+        )
+    }
+}
+
+impl CiBranchPromoter for LocalGit {
+    fn fetch(&self, remote: &str, branches: &[&str]) -> Result<(), PromoteError> {
+        let mut args = vec!["fetch", remote];
+        args.extend_from_slice(branches);
+        self.run(&args, &format!("git fetch {remote} failed"))
+    }
+
+    fn remote_sha(&self, remote: &str, branch: &str) -> Result<String, PromoteError> {
+        let r = format!("{remote}/{branch}");
+        self.run_output(&["rev-parse", "--short", &r], &format!("failed to resolve {r}"))
+    }
+
+    fn ff_status(&self, remote: &str, from: &str, to: &str) -> Result<FfStatus, PromoteError> {
+        let from_ref = format!("{remote}/{from}");
+        let to_ref = format!("{remote}/{to}");
+
+        // Use full SHAs for merge-base comparison.
+        let from_sha =
+            self.run_output(&["rev-parse", &from_ref], &format!("failed to resolve {from_ref}"))?;
+        let to_sha =
+            self.run_output(&["rev-parse", &to_ref], &format!("failed to resolve {to_ref}"))?;
+
+        if from_sha == to_sha {
+            return Ok(FfStatus::InSync);
+        }
+
+        let base_sha =
+            self.run_output(&["merge-base", &from_sha, &to_sha], "git merge-base failed")?;
+
+        if base_sha == to_sha {
+            Ok(FfStatus::Promotable)
+        } else {
+            Ok(FfStatus::Diverged)
+        }
+    }
+
+    fn checkout_and_ff_merge(
+        &self,
+        remote: &str,
+        from: &str,
+        to: &str,
+    ) -> Result<(), PromoteError> {
+        self.run(&["checkout", to], &format!("failed to checkout '{to}'"))?;
+        let from_ref = format!("{remote}/{from}");
+        self.run(
+            &["merge", "--ff-only", &from_ref],
+            &format!("fast-forward merge {from_ref} -> {to} failed"),
+        )
+    }
+
+    fn push_branch_to(&self, remote: &str, branch: &str) -> Result<(), PromoteError> {
+        self.run(
+            &["push", remote, branch],
+            &format!("failed to push '{branch}' to '{remote}'"),
+        )
+    }
+
+    fn push_all_tags_to(&self, remote: &str) -> Result<(), PromoteError> {
+        self.run(
+            &["push", remote, "--tags"],
+            &format!("failed to push tags to '{remote}'"),
         )
     }
 }

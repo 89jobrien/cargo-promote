@@ -15,7 +15,7 @@ use domain::pipeline::PipelineEngine;
 use domain::traits::{DeferralStore, Forge, NoopForge, Notifier, PipelineRunner, RegistryQuery};
 pub use domain::traits::GitOps;
 use domain::version;
-use domain::{CrateInfo, CrateRef, Pipeline, PublishOpts, Stage};
+use domain::{CrateInfo, CrateRef, Pipeline, PromoteError, PublishOpts, Stage};
 use infra::cargo::CargoPublisher;
 use infra::git::gitea::GiteaRegistry;
 use infra::registry_cache::CachingRegistryQuery;
@@ -63,6 +63,28 @@ pub struct PublishAllParams<'a> {
     pub force: bool,
     pub registry: Option<&'a str>,
     pub skip: &'a [&'a str],
+}
+
+/// Parameters for `Api::ci_promote`.
+#[derive(Debug)]
+pub struct CiPromoteParams<'a> {
+    pub remote: &'a str,
+    pub from: &'a str,
+    pub to: &'a str,
+    pub package: &'a str,
+    pub dry_run: bool,
+}
+
+impl Default for CiPromoteParams<'_> {
+    fn default() -> Self {
+        Self {
+            remote: "origin",
+            from: "develop",
+            to: "main",
+            package: "",
+            dry_run: false,
+        }
+    }
 }
 
 /// If autobump is configured, bump the manifest version and return an
@@ -241,7 +263,12 @@ impl Api {
     fn resolve_pipeline(&self, name: Option<&str>) -> Result<&Pipeline> {
         self.config
             .pipeline(name)
-            .ok_or_else(|| anyhow::anyhow!("pipeline '{}' not found", name.unwrap_or("default")))
+            .ok_or_else(|| {
+                PromoteError::PipelineNotFound {
+                    name: name.unwrap_or("default").to_string(),
+                }
+                .into()
+            })
     }
 
     /// Publish a crate to the first stage of a pipeline (or a named
@@ -259,7 +286,7 @@ impl Api {
             let reg = self
                 .config
                 .registry(reg_name)
-                .ok_or_else(|| anyhow::anyhow!("unknown registry '{reg_name}'"))?;
+                .ok_or_else(|| PromoteError::RegistryNotFound { name: reg_name.to_string() })?;
             let stage = Stage {
                 registry: reg.clone(),
             };
@@ -307,7 +334,7 @@ impl Api {
         let reg = self
             .config
             .registry(reg_name)
-            .ok_or_else(|| anyhow::anyhow!("unknown registry '{reg_name}'"))?;
+            .ok_or_else(|| PromoteError::RegistryNotFound { name: reg_name.to_string() })?;
         let crates = self.registry_query.list_crates(reg)?;
         Ok(crates)
     }
@@ -363,7 +390,7 @@ impl Api {
         let reg = self
             .config
             .registry(reg_name)
-            .ok_or_else(|| anyhow::anyhow!("unknown registry '{reg_name}'"))?;
+            .ok_or_else(|| PromoteError::RegistryNotFound { name: reg_name.to_string() })?;
         let stage = Stage {
             registry: reg.clone(),
         };
@@ -410,7 +437,7 @@ impl Api {
             .config
             .branch_pipeline
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("branch pipeline not configured in promote.toml"))?;
+            .ok_or(PromoteError::BranchPipelineNotConfigured)?;
         let repo_path = path.unwrap_or(cwd);
         domain::pipeline::BranchPipeline::bump(&krate, &branch_cfg.stages, repo_path, &*self.git)?;
         Ok(())
@@ -428,7 +455,7 @@ impl Api {
             .config
             .branch_pipeline
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("branch pipeline not configured in promote.toml"))?;
+            .ok_or(PromoteError::BranchPipelineNotConfigured)?;
         let repo_root = path.unwrap_or(cwd);
 
         // TODO(#12): add dry_run parameter — print planned merge without executing
@@ -447,6 +474,24 @@ impl Api {
         Ok(())
     }
 
+    /// CI promote: FF-merge `from` → `to`, rail patch bump, push commit + tags.
+    ///
+    /// All output is prefixed `[promote] {sha}::{kind} | `.
+    pub fn ci_promote(&self, params: &CiPromoteParams<'_>, repo_root: &Path) -> Result<()> {
+        let git = infra::git::local::LocalGit::new(repo_root.to_path_buf());
+        let bumper = infra::rail::ProcessRailBumper::new(repo_root.to_path_buf());
+        domain::pipeline::BranchPipeline::ci_promote(
+            params.remote,
+            params.from,
+            params.to,
+            params.package,
+            params.dry_run,
+            &git,
+            &bumper,
+        )?;
+        Ok(())
+    }
+
     /// Tag the release branch with a version tag.
     pub fn branch_tag(
         &self,
@@ -458,7 +503,7 @@ impl Api {
             .config
             .branch_pipeline
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("branch pipeline not configured in promote.toml"))?;
+            .ok_or(PromoteError::BranchPipelineNotConfigured)?;
         domain::pipeline::BranchPipeline::publish(
             &krate,
             &branch_cfg.release_branch,
@@ -488,11 +533,17 @@ impl Api {
             .stages
             .iter()
             .position(|s| s.registry.name == from)
-            .ok_or_else(|| anyhow::anyhow!("unknown stage '{from}' in pipeline"))?;
+            .ok_or_else(|| PromoteError::StageNotFound {
+                pipeline: pl.name.clone(),
+                stage: from.to_string(),
+            })?;
         let to_stage = pl
             .stages
             .get(from_idx + 1)
-            .ok_or_else(|| anyhow::anyhow!("no next stage after '{from}'"))?;
+            .ok_or_else(|| PromoteError::NoNextStage {
+                pipeline: pl.name.clone(),
+                stage: from.to_string(),
+            })?;
 
         let source_hash = domain::promote_lock::PromoteLock::compute_source_hash(repo_root)?;
 
@@ -546,17 +597,23 @@ impl Api {
             .config
             .branch_pipeline
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("branch pipeline not configured in promote.toml"))?;
+            .ok_or(PromoteError::BranchPipelineNotConfigured)?;
 
         let from_idx = branch_cfg
             .stages
             .iter()
             .position(|s| s == from)
-            .ok_or_else(|| anyhow::anyhow!("unknown branch stage '{from}'"))?;
+            .ok_or_else(|| PromoteError::StageNotFound {
+                pipeline: "branch".to_string(),
+                stage: from.to_string(),
+            })?;
         let to_stage = branch_cfg
             .stages
             .get(from_idx + 1)
-            .ok_or_else(|| anyhow::anyhow!("no next stage after '{from}'"))?;
+            .ok_or_else(|| PromoteError::NoNextStage {
+                pipeline: "branch".to_string(),
+                stage: from.to_string(),
+            })?;
 
         // Verify promote.lock hash before deferring.
         let lock = domain::promote_lock::PromoteLock::read(repo_root)?;

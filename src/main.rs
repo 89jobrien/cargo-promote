@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
 
-use cargo_promote::{Api, PromoteParams, PublishAllParams, PublishParams, ShipParams};
+use cargo_promote::{Api, CiPromoteParams, PromoteParams, PublishAllParams, PublishParams, ShipParams};
 use cli::{interactive_confirmer, Cli, Cmd};
 
 // TODO(#18): add Doctor subcommand — validate registry connectivity, tokens,
@@ -175,6 +175,33 @@ fn main() -> Result<()> {
                 api.branch_tag(path.as_deref(), None)?;
             }
             Ok(())
+        }
+
+        Cmd::CiPromote {
+            remote,
+            from,
+            to,
+            package,
+            path,
+            dry_run,
+        } => {
+            let repo_root = path.unwrap_or_else(|| cwd.clone());
+            let api = api_for(Some(&repo_root), &cwd)?;
+            let package = package.unwrap_or_else(|| {
+                cargo_promote::domain::manifest::resolve_crate(Some(&repo_root), None)
+                    .map(|k| k.name)
+                    .unwrap_or_default()
+            });
+            api.ci_promote(
+                &CiPromoteParams {
+                    remote: &remote,
+                    from: &from,
+                    to: &to,
+                    package: &package,
+                    dry_run,
+                },
+                &repo_root,
+            )
         }
 
         Cmd::Defer {

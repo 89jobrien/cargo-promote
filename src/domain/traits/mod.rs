@@ -142,6 +142,40 @@ pub trait Notifier {
     fn on_deferred(&self, deferral: &Deferral) -> Result<(), PromoteError>;
 }
 
+/// Result of a fast-forward feasibility check.
+#[derive(Debug, PartialEq, Eq)]
+pub enum FfStatus {
+    /// Both refs point to the same commit — nothing to promote.
+    InSync,
+    /// `to` is a strict ancestor of `from` — FF merge is possible.
+    Promotable,
+    /// Branches have diverged — FF is not possible.
+    Diverged,
+}
+
+/// Port: CI-level branch promote operations (fetch, divergence check, FF merge, push).
+pub trait CiBranchPromoter {
+    fn fetch(&self, remote: &str, branches: &[&str]) -> Result<(), PromoteError>;
+    /// Resolve `{remote}/{branch}` to a short (7-char) SHA.
+    fn remote_sha(&self, remote: &str, branch: &str) -> Result<String, PromoteError>;
+    fn ff_status(&self, remote: &str, from: &str, to: &str) -> Result<FfStatus, PromoteError>;
+    fn checkout_and_ff_merge(
+        &self,
+        remote: &str,
+        from: &str,
+        to: &str,
+    ) -> Result<(), PromoteError>;
+    fn push_branch_to(&self, remote: &str, branch: &str) -> Result<(), PromoteError>;
+    fn push_all_tags_to(&self, remote: &str) -> Result<(), PromoteError>;
+}
+
+/// Port: bump the patch version of a package via cargo-rail.
+pub trait RailBumper {
+    /// Run `cargo rail release run <package> --bump=patch --skip-publish --yes`.
+    /// Returns the new version string.
+    fn patch_bump(&self, package: &str) -> Result<String, PromoteError>;
+}
+
 /// Port: interact with a code forge (Gitea, GitHub, etc.).
 pub trait Forge {
     /// Create a release on the forge.

@@ -1,4 +1,4 @@
-use super::traits::{GitCommitter, PipelineRunner, Publisher, RegistryQuery};
+use super::traits::{CiBranchPromoter, FfStatus, GitCommitter, PipelineRunner, Publisher, RailBumper, RegistryQuery};
 use super::{CrateRef, Pipeline, PromoteError, PublishOpts, Stage};
 
 /// Drives a crate through pipeline stages.
@@ -184,7 +184,7 @@ impl BranchPipeline {
 
         lock.write(repo_path).map_err(PromoteError::Other)?;
 
-        git.stage(&["Cargo.toml", "promote.lock"])?;
+        git.stage(&["Cargo.toml", "Cargo.lock", "promote.lock"])?;
         git.commit(&format!("bump: {} v{}", krate.name, new_version))?;
         git.push_head()?;
 
@@ -209,10 +209,14 @@ impl BranchPipeline {
         let from_idx = stages
             .iter()
             .position(|s| s == from_stage)
-            .ok_or_else(|| PromoteError::Other(anyhow::anyhow!("unknown stage '{from_stage}'")))?;
+            .ok_or_else(|| PromoteError::StageNotFound {
+                pipeline: "branch".to_string(),
+                stage: from_stage.to_string(),
+            })?;
 
-        let to_stage = stages.get(from_idx + 1).ok_or_else(|| {
-            PromoteError::Other(anyhow::anyhow!("no next stage after '{from_stage}'"))
+        let to_stage = stages.get(from_idx + 1).ok_or_else(|| PromoteError::NoNextStage {
+            pipeline: "branch".to_string(),
+            stage: from_stage.to_string(),
         })?;
 
         // Read and verify promote.lock
@@ -231,6 +235,74 @@ impl BranchPipeline {
         eprintln!("=> {to_stage} updated and pushed");
 
         Ok(())
+    }
+
+    /// CI promote: FF-merge `from` → `to`, rail patch bump, push commit + tags.
+    ///
+    /// All output is prefixed `[promote] {sha}::{kind} | ` where `sha` is the
+    /// short SHA of the `from` branch tip at fetch time.
+    ///
+    /// Returns `Some(new_version)` on success, or `None` on no-op / dry-run.
+    pub fn ci_promote(
+        remote: &str,
+        from: &str,
+        to: &str,
+        package: &str,
+        dry_run: bool,
+        promoter: &dyn CiBranchPromoter,
+        bumper: &dyn RailBumper,
+    ) -> Result<Option<String>, PromoteError> {
+        promoter.fetch(remote, &[from, to])?;
+
+        let sha = promoter.remote_sha(remote, from)?;
+        let log = |kind: &str, msg: &str| {
+            eprintln!("[promote] {sha}::{kind} | {msg}");
+        };
+
+        match promoter.ff_status(remote, from, to)? {
+            FfStatus::InSync => {
+                log("info", &format!("nothing to promote: {from} and {to} are already in sync"));
+                return Ok(None);
+            }
+            FfStatus::Diverged => {
+                log(
+                    "error",
+                    &format!(
+                        "promote blocked: {remote}/{to} is not an ancestor of \
+                         {remote}/{from} — branches have diverged"
+                    ),
+                );
+                return Err(PromoteError::Other(anyhow::anyhow!(
+                    "promote blocked: {remote}/{from} and {remote}/{to} have diverged"
+                )));
+            }
+            FfStatus::Promotable => {}
+        }
+
+        if dry_run {
+            log("dry-run", &format!("git checkout {to}"));
+            log("dry-run", &format!("git merge --ff-only {remote}/{from}"));
+            log(
+                "dry-run",
+                &format!("cargo rail release run {package} --bump=patch --skip-publish --yes"),
+            );
+            log("dry-run", &format!("git push {remote} {to}"));
+            log("dry-run", &format!("git push {remote} --tags"));
+            return Ok(None);
+        }
+
+        log("info", &format!("merging {remote}/{from} → {to}"));
+        promoter.checkout_and_ff_merge(remote, from, to)?;
+
+        log("info", &format!("running rail patch bump for {package}"));
+        let new_version = bumper.patch_bump(package)?;
+
+        log("info", &format!("pushing {to} and tags to {remote}"));
+        promoter.push_branch_to(remote, to)?;
+        promoter.push_all_tags_to(remote)?;
+
+        log("info", &format!("promoted {from} → {to}: {package} v{new_version}"));
+        Ok(Some(new_version))
     }
 
     /// Publish (create git tag on release branch).
@@ -571,7 +643,7 @@ mod tests {
 
         let result = BranchPipeline::branch(&stages, "main", &merger, &pusher, root);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("no next stage"));
+        assert!(result.unwrap_err().to_string().contains("last stage"));
     }
 
     #[test]

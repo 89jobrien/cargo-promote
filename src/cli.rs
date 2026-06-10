@@ -127,6 +127,27 @@ pub enum Cmd {
         tag: bool,
     },
 
+    /// CI promote: FF-merge develop → main, rail patch bump, push commit + tags
+    CiPromote {
+        /// Git remote name
+        #[arg(long, default_value = "origin")]
+        remote: String,
+        /// Source branch (default: develop)
+        #[arg(long, default_value = "develop")]
+        from: String,
+        /// Target branch (default: main)
+        #[arg(long, default_value = "main")]
+        to: String,
+        /// Crate / package name to pass to cargo-rail
+        #[arg(long)]
+        package: Option<String>,
+        #[arg(short, long)]
+        path: Option<PathBuf>,
+        /// Print plan, make no changes
+        #[arg(long, short = 'n')]
+        dry_run: bool,
+    },
+
     /// Defer promotion to the next stage (provisional, pending confirmation)
     Defer {
         #[arg(long)]
