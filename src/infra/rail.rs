@@ -17,7 +17,15 @@ impl ProcessRailBumper {
 impl RailBumper for ProcessRailBumper {
     fn patch_bump(&self, package: &str) -> Result<String, PromoteError> {
         let status = Command::new("cargo")
-            .args(["rail", "release", "run", package, "--bump=patch", "--skip-publish", "--yes"])
+            .args([
+                "rail",
+                "release",
+                "run",
+                package,
+                "--bump=patch",
+                "--skip-publish",
+                "--yes",
+            ])
             .current_dir(&self.repo_root)
             .status()
             .map_err(|e| PromoteError::Other(e.into()))?;

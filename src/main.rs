@@ -4,8 +4,10 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
 
-use cargo_promote::{Api, CiPromoteParams, PromoteParams, PublishAllParams, PublishParams, ShipParams};
-use cli::{interactive_confirmer, Cli, Cmd};
+use cargo_promote::{
+    Api, CiPromoteParams, PromoteParams, PublishAllParams, PublishParams, ShipParams,
+};
+use cli::{Cli, Cmd, interactive_confirmer};
 
 // TODO(#18): add Doctor subcommand — validate registry connectivity, tokens,
 // branch existence, and promote.toml consistency in one pass

@@ -47,7 +47,10 @@ impl CargoTokenResolver {
 
     /// Build with a custom credentials path and env lookup (for testing).
     #[cfg(test)]
-    fn with_env(path: PathBuf, env_lookup: impl Fn(&str) -> Option<String> + Send + Sync + 'static) -> Self {
+    fn with_env(
+        path: PathBuf,
+        env_lookup: impl Fn(&str) -> Option<String> + Send + Sync + 'static,
+    ) -> Self {
         Self {
             credentials_path: path,
             env_lookup: Box::new(env_lookup),
@@ -83,19 +86,18 @@ impl CargoTokenResolver {
     fn resolve_uncached(&self, registry_name: &str) -> Result<Option<SecretString>, PromoteError> {
         // 1. Check CARGO_REGISTRIES_{NAME}_TOKEN
         let env_key = Self::env_var_name(registry_name);
-        if let Some(val) = (self.env_lookup)(&env_key) {
-            if !val.is_empty() {
-                return Ok(Some(SecretString::from(val)));
-            }
+        if let Some(val) = (self.env_lookup)(&env_key)
+            && !val.is_empty()
+        {
+            return Ok(Some(SecretString::from(val)));
         }
 
         // 2. For crates-io, also check CARGO_REGISTRY_TOKEN
-        if registry_name == "crates-io" {
-            if let Some(val) = (self.env_lookup)("CARGO_REGISTRY_TOKEN") {
-                if !val.is_empty() {
-                    return Ok(Some(SecretString::from(val)));
-                }
-            }
+        if registry_name == "crates-io"
+            && let Some(val) = (self.env_lookup)("CARGO_REGISTRY_TOKEN")
+            && !val.is_empty()
+        {
+            return Ok(Some(SecretString::from(val)));
         }
 
         // 3. Fall back to credentials.toml
@@ -133,7 +135,9 @@ mod tests {
     use secrecy::ExposeSecret;
     use std::collections::HashMap;
 
-    fn mock_env(vars: Vec<(&str, &str)>) -> impl Fn(&str) -> Option<String> + Send + Sync + 'static {
+    fn mock_env(
+        vars: Vec<(&str, &str)>,
+    ) -> impl Fn(&str) -> Option<String> + Send + Sync + 'static {
         let map: HashMap<String, String> = vars
             .into_iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
@@ -153,7 +157,7 @@ mod tests {
         );
         let result = resolver.resolve("cratebox").unwrap();
         assert_eq!(
-            result.as_ref().map(|s| s.expose_secret().as_ref()),
+            result.as_ref().map(|s| s.expose_secret()),
             Some("test-token-123")
         );
     }
@@ -166,17 +170,14 @@ mod tests {
         );
         let result = resolver.resolve("crates-io").unwrap();
         assert_eq!(
-            result.as_ref().map(|s| s.expose_secret().as_ref()),
+            result.as_ref().map(|s| s.expose_secret()),
             Some("crates-io-token")
         );
     }
 
     #[test]
     fn resolve_none_when_no_token() {
-        let resolver = CargoTokenResolver::with_env(
-            PathBuf::from("/nonexistent"),
-            empty_env(),
-        );
+        let resolver = CargoTokenResolver::with_env(PathBuf::from("/nonexistent"), empty_env());
         let result = resolver.resolve("nonexistent").unwrap();
         assert!(result.is_none());
     }
@@ -194,7 +195,7 @@ mod tests {
         let resolver = CargoTokenResolver::with_env(cred_path, empty_env());
         let result = resolver.resolve("myrepo").unwrap();
         assert_eq!(
-            result.as_ref().map(|s| s.expose_secret().as_ref()),
+            result.as_ref().map(|s| s.expose_secret()),
             Some("file-token-456")
         );
     }
@@ -215,7 +216,7 @@ mod tests {
         );
         let result = resolver.resolve("precedence").unwrap();
         assert_eq!(
-            result.as_ref().map(|s| s.expose_secret().as_ref()),
+            result.as_ref().map(|s| s.expose_secret()),
             Some("env-token")
         );
     }
