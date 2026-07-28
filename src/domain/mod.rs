@@ -126,15 +126,6 @@ pub enum PromoteError {
     #[error("user aborted")]
     Aborted,
 
-    #[error("registry '{name}' not found in config")]
-    RegistryNotFound { name: String },
-
-    #[error("pipeline '{name}' not found in config")]
-    PipelineNotFound { name: String },
-
-    #[error("branch pipeline not configured")]
-    BranchPipelineNotConfigured,
-
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
