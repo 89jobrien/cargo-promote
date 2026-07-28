@@ -1,4 +1,6 @@
-use super::traits::{CiBranchPromoter, FfStatus, GitCommitter, PipelineRunner, Publisher, RailBumper, RegistryQuery};
+use super::traits::{
+    CiBranchPromoter, FfStatus, GitCommitter, PipelineRunner, Publisher, RailBumper, RegistryQuery,
+};
 use super::{CrateRef, Pipeline, PromoteError, PublishOpts, Stage};
 
 /// Drives a crate through pipeline stages.
@@ -44,13 +46,13 @@ impl<P: Publisher, Q: RegistryQuery> PipelineEngine<P, Q> {
             && let Ok(true) =
                 self.registry_query
                     .crate_exists(&stage.registry, &krate.name, &krate.version)
-            {
-                eprintln!(
-                    "=> {} v{} already exists in '{}', skipping (use --force to override)",
-                    krate.name, krate.version, stage.registry.name
-                );
-                return Ok(());
-            }
+        {
+            eprintln!(
+                "=> {} v{} already exists in '{}', skipping (use --force to override)",
+                krate.name, krate.version, stage.registry.name
+            );
+            return Ok(());
+        }
 
         if stage.registry.confirm && !opts.skip_confirm && !opts.dry_run {
             let prompt = format!(
@@ -206,18 +208,19 @@ impl BranchPipeline {
         use crate::domain::promote_lock::PromoteLock;
 
         // Find the next stage
-        let from_idx = stages
-            .iter()
-            .position(|s| s == from_stage)
-            .ok_or_else(|| PromoteError::StageNotFound {
+        let from_idx = stages.iter().position(|s| s == from_stage).ok_or_else(|| {
+            PromoteError::StageNotFound {
+                pipeline: "branch".to_string(),
+                stage: from_stage.to_string(),
+            }
+        })?;
+
+        let to_stage = stages
+            .get(from_idx + 1)
+            .ok_or_else(|| PromoteError::NoNextStage {
                 pipeline: "branch".to_string(),
                 stage: from_stage.to_string(),
             })?;
-
-        let to_stage = stages.get(from_idx + 1).ok_or_else(|| PromoteError::NoNextStage {
-            pipeline: "branch".to_string(),
-            stage: from_stage.to_string(),
-        })?;
 
         // Read and verify promote.lock
         let lock = PromoteLock::read(repo_path).map_err(PromoteError::Other)?;
@@ -261,7 +264,10 @@ impl BranchPipeline {
 
         match promoter.ff_status(remote, from, to)? {
             FfStatus::InSync => {
-                log("info", &format!("nothing to promote: {from} and {to} are already in sync"));
+                log(
+                    "info",
+                    &format!("nothing to promote: {from} and {to} are already in sync"),
+                );
                 return Ok(None);
             }
             FfStatus::Diverged => {
@@ -301,7 +307,10 @@ impl BranchPipeline {
         promoter.push_branch_to(remote, to)?;
         promoter.push_all_tags_to(remote)?;
 
-        log("info", &format!("promoted {from} → {to}: {package} v{new_version}"));
+        log(
+            "info",
+            &format!("promoted {from} → {to}: {package} v{new_version}"),
+        );
         Ok(Some(new_version))
     }
 
@@ -575,8 +584,7 @@ mod tests {
         std::fs::write(root.join("src/lib.rs"), "fn main() {}").unwrap();
 
         // Write a promote.lock with the correct hash
-        let hash =
-            crate::domain::promote_lock::PromoteLock::compute_source_hash(root).unwrap();
+        let hash = crate::domain::promote_lock::PromoteLock::compute_source_hash(root).unwrap();
         let lock = crate::domain::promote_lock::PromoteLock {
             version: "0.1.0".to_string(),
             source_hash: hash,
@@ -609,8 +617,7 @@ mod tests {
         let merger = MockMerger::new();
         let pusher = MockPusher::new();
 
-        let result =
-            BranchPipeline::branch(&stages, "nonexistent", &merger, &pusher, dir.path());
+        let result = BranchPipeline::branch(&stages, "nonexistent", &merger, &pusher, dir.path());
         assert!(result.is_err());
         assert!(
             result.unwrap_err().to_string().contains("nonexistent"),
@@ -627,8 +634,7 @@ mod tests {
         std::fs::create_dir(root.join("src")).unwrap();
         std::fs::write(root.join("src/lib.rs"), "fn main() {}").unwrap();
 
-        let hash =
-            crate::domain::promote_lock::PromoteLock::compute_source_hash(root).unwrap();
+        let hash = crate::domain::promote_lock::PromoteLock::compute_source_hash(root).unwrap();
         let lock = crate::domain::promote_lock::PromoteLock {
             version: "0.1.0".to_string(),
             source_hash: hash,
@@ -656,7 +662,10 @@ mod tests {
 
         assert_eq!(
             tagger.tags.borrow().as_slice(),
-            &[("v0.1.0".to_string(), "Release test-crate v0.1.0".to_string())]
+            &[(
+                "v0.1.0".to_string(),
+                "Release test-crate v0.1.0".to_string()
+            )]
         );
         assert_eq!(pusher.tags.borrow().as_slice(), &["v0.1.0"]);
     }

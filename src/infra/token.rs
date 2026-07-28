@@ -47,7 +47,10 @@ impl CargoTokenResolver {
 
     /// Build with a custom credentials path and env lookup (for testing).
     #[cfg(test)]
-    fn with_env(path: PathBuf, env_lookup: impl Fn(&str) -> Option<String> + Send + Sync + 'static) -> Self {
+    fn with_env(
+        path: PathBuf,
+        env_lookup: impl Fn(&str) -> Option<String> + Send + Sync + 'static,
+    ) -> Self {
         Self {
             credentials_path: path,
             env_lookup: Box::new(env_lookup),
@@ -132,7 +135,9 @@ mod tests {
     use secrecy::ExposeSecret;
     use std::collections::HashMap;
 
-    fn mock_env(vars: Vec<(&str, &str)>) -> impl Fn(&str) -> Option<String> + Send + Sync + 'static {
+    fn mock_env(
+        vars: Vec<(&str, &str)>,
+    ) -> impl Fn(&str) -> Option<String> + Send + Sync + 'static {
         let map: HashMap<String, String> = vars
             .into_iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
@@ -152,7 +157,7 @@ mod tests {
         );
         let result = resolver.resolve("cratebox").unwrap();
         assert_eq!(
-            result.as_ref().map(|s| s.expose_secret().as_ref()),
+            result.as_ref().map(|s| s.expose_secret()),
             Some("test-token-123")
         );
     }
@@ -165,17 +170,14 @@ mod tests {
         );
         let result = resolver.resolve("crates-io").unwrap();
         assert_eq!(
-            result.as_ref().map(|s| s.expose_secret().as_ref()),
+            result.as_ref().map(|s| s.expose_secret()),
             Some("crates-io-token")
         );
     }
 
     #[test]
     fn resolve_none_when_no_token() {
-        let resolver = CargoTokenResolver::with_env(
-            PathBuf::from("/nonexistent"),
-            empty_env(),
-        );
+        let resolver = CargoTokenResolver::with_env(PathBuf::from("/nonexistent"), empty_env());
         let result = resolver.resolve("nonexistent").unwrap();
         assert!(result.is_none());
     }
@@ -193,7 +195,7 @@ mod tests {
         let resolver = CargoTokenResolver::with_env(cred_path, empty_env());
         let result = resolver.resolve("myrepo").unwrap();
         assert_eq!(
-            result.as_ref().map(|s| s.expose_secret().as_ref()),
+            result.as_ref().map(|s| s.expose_secret()),
             Some("file-token-456")
         );
     }
@@ -214,7 +216,7 @@ mod tests {
         );
         let result = resolver.resolve("precedence").unwrap();
         assert_eq!(
-            result.as_ref().map(|s| s.expose_secret().as_ref()),
+            result.as_ref().map(|s| s.expose_secret()),
             Some("env-token")
         );
     }

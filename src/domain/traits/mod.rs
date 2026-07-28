@@ -159,12 +159,8 @@ pub trait CiBranchPromoter {
     /// Resolve `{remote}/{branch}` to a short (7-char) SHA.
     fn remote_sha(&self, remote: &str, branch: &str) -> Result<String, PromoteError>;
     fn ff_status(&self, remote: &str, from: &str, to: &str) -> Result<FfStatus, PromoteError>;
-    fn checkout_and_ff_merge(
-        &self,
-        remote: &str,
-        from: &str,
-        to: &str,
-    ) -> Result<(), PromoteError>;
+    fn checkout_and_ff_merge(&self, remote: &str, from: &str, to: &str)
+    -> Result<(), PromoteError>;
     fn push_branch_to(&self, remote: &str, branch: &str) -> Result<(), PromoteError>;
     fn push_all_tags_to(&self, remote: &str) -> Result<(), PromoteError>;
 }

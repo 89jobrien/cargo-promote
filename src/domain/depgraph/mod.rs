@@ -95,7 +95,6 @@ fn resolve_manifests_via_metadata(dir: &Path) -> Vec<PathBuf> {
     }
 }
 
-
 fn parse_manifest(path: &Path) -> Option<toml::Value> {
     let content = std::fs::read_to_string(path).ok()?;
     content.parse().ok()
@@ -193,7 +192,6 @@ pub fn topo_sort(nodes: &[CrateNode]) -> Result<Vec<String>> {
 
     Ok(order)
 }
-
 
 /// Extract internal deps and path-only deps from [dependencies] and [build-dependencies].
 fn collect_internal_deps(

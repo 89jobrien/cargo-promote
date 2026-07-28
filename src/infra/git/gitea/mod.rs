@@ -61,7 +61,10 @@ impl GiteaRegistry {
             })
     }
 
-    fn run_curl(cmd: &mut Command, registry_name: &str) -> Result<std::process::Output, PromoteError> {
+    fn run_curl(
+        cmd: &mut Command,
+        registry_name: &str,
+    ) -> Result<std::process::Output, PromoteError> {
         cmd.output().map_err(|e| PromoteError::QueryFailed {
             registry: registry_name.to_string(),
             reason: format!("failed to run curl: {e}"),
@@ -79,7 +82,11 @@ impl RegistryQuery for GiteaRegistry {
     ) -> Result<bool, PromoteError> {
         let api_url = Self::require_api_url(registry)?;
         let url = format!("{api_url}/{name}/{version}");
-        let mut cmd = self.curl_cmd(&url, &registry.name, &["-sf", "-o", "/dev/null", "-w", "%{http_code}"])?;
+        let mut cmd = self.curl_cmd(
+            &url,
+            &registry.name,
+            &["-sf", "-o", "/dev/null", "-w", "%{http_code}"],
+        )?;
         let output = Self::run_curl(&mut cmd, &registry.name)?;
         let status_code = String::from_utf8_lossy(&output.stdout);
         Ok(status_code.trim() == "200")

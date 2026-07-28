@@ -12,8 +12,8 @@ use domain::deferral::{Deferral, DeferralKind, DeferralStatus};
 use domain::depgraph;
 use domain::manifest::{self, ManifestDescription};
 use domain::pipeline::PipelineEngine;
-use domain::traits::{DeferralStore, Forge, NoopForge, Notifier, PipelineRunner, RegistryQuery};
 pub use domain::traits::GitOps;
+use domain::traits::{DeferralStore, Forge, NoopForge, Notifier, PipelineRunner, RegistryQuery};
 use domain::version;
 use domain::{CrateInfo, CrateRef, Pipeline, PromoteError, PublishOpts, Stage};
 use infra::cargo::CargoPublisher;
@@ -178,9 +178,7 @@ impl ApiBuilder {
                 .notifier
                 .ok_or_else(|| anyhow::anyhow!("notifier required"))?,
             forge: self.forge.unwrap_or_else(|| Box::new(NoopForge)),
-            git: self
-                .git
-                .ok_or_else(|| anyhow::anyhow!("git required"))?,
+            git: self.git.ok_or_else(|| anyhow::anyhow!("git required"))?,
             deferral_store: self
                 .deferral_store
                 .ok_or_else(|| anyhow::anyhow!("deferral_store required"))?,
@@ -202,9 +200,10 @@ impl Api {
         Ok(Self {
             config,
             engine: Box::new(engine),
-            registry_query: Box::new(CachingRegistryQuery::new(GiteaRegistry::new(
-                std::sync::Arc::new(CargoTokenResolver::new()),
-            ))),
+            registry_query: Box::new(CachingRegistryQuery::new(GiteaRegistry::new({
+                #[allow(clippy::arc_with_non_send_sync)]
+                std::sync::Arc::new(CargoTokenResolver::new())
+            }))),
             notifier: Box::new(infra::notify::NoopNotifier),
             forge: Box::new(NoopForge),
             git: Box::new(infra::git::local::LocalGit::new(dir.to_path_buf())),
@@ -228,9 +227,10 @@ impl Api {
         Ok(Self {
             config,
             engine: Box::new(engine),
-            registry_query: Box::new(CachingRegistryQuery::new(GiteaRegistry::new(
-                std::sync::Arc::new(CargoTokenResolver::new()),
-            ))),
+            registry_query: Box::new(CachingRegistryQuery::new(GiteaRegistry::new({
+                #[allow(clippy::arc_with_non_send_sync)]
+                std::sync::Arc::new(CargoTokenResolver::new())
+            }))),
             notifier: Box::new(infra::notify::SpawnNotifier { command }),
             forge: Box::new(NoopForge),
             git: Box::new(infra::git::local::LocalGit::new(dir.to_path_buf())),
@@ -261,14 +261,12 @@ impl Api {
     }
 
     fn resolve_pipeline(&self, name: Option<&str>) -> Result<&Pipeline> {
-        self.config
-            .pipeline(name)
-            .ok_or_else(|| {
-                PromoteError::PipelineNotFound {
-                    name: name.unwrap_or("default").to_string(),
-                }
-                .into()
-            })
+        self.config.pipeline(name).ok_or_else(|| {
+            PromoteError::PipelineNotFound {
+                name: name.unwrap_or("default").to_string(),
+            }
+            .into()
+        })
     }
 
     /// Publish a crate to the first stage of a pipeline (or a named
@@ -283,10 +281,12 @@ impl Api {
         };
 
         if let Some(reg_name) = params.registry {
-            let reg = self
-                .config
-                .registry(reg_name)
-                .ok_or_else(|| PromoteError::RegistryNotFound { name: reg_name.to_string() })?;
+            let reg =
+                self.config
+                    .registry(reg_name)
+                    .ok_or_else(|| PromoteError::RegistryNotFound {
+                        name: reg_name.to_string(),
+                    })?;
             let stage = Stage {
                 registry: reg.clone(),
             };
@@ -334,7 +334,9 @@ impl Api {
         let reg = self
             .config
             .registry(reg_name)
-            .ok_or_else(|| PromoteError::RegistryNotFound { name: reg_name.to_string() })?;
+            .ok_or_else(|| PromoteError::RegistryNotFound {
+                name: reg_name.to_string(),
+            })?;
         let crates = self.registry_query.list_crates(reg)?;
         Ok(crates)
     }
@@ -390,7 +392,9 @@ impl Api {
         let reg = self
             .config
             .registry(reg_name)
-            .ok_or_else(|| PromoteError::RegistryNotFound { name: reg_name.to_string() })?;
+            .ok_or_else(|| PromoteError::RegistryNotFound {
+                name: reg_name.to_string(),
+            })?;
         let stage = Stage {
             registry: reg.clone(),
         };
@@ -468,7 +472,11 @@ impl Api {
             )?;
         } else {
             domain::pipeline::BranchPipeline::branch(
-                &branch_cfg.stages, from, &*self.git, &*self.git, repo_root,
+                &branch_cfg.stages,
+                from,
+                &*self.git,
+                &*self.git,
+                repo_root,
             )?;
         }
         Ok(())
@@ -493,11 +501,7 @@ impl Api {
     }
 
     /// Tag the release branch with a version tag.
-    pub fn branch_tag(
-        &self,
-        path: Option<&Path>,
-        package: Option<&str>,
-    ) -> Result<()> {
+    pub fn branch_tag(&self, path: Option<&Path>, package: Option<&str>) -> Result<()> {
         let krate = manifest::resolve_crate(path, package)?;
         let branch_cfg = self
             .config
@@ -607,13 +611,14 @@ impl Api {
                 pipeline: "branch".to_string(),
                 stage: from.to_string(),
             })?;
-        let to_stage = branch_cfg
-            .stages
-            .get(from_idx + 1)
-            .ok_or_else(|| PromoteError::NoNextStage {
-                pipeline: "branch".to_string(),
-                stage: from.to_string(),
-            })?;
+        let to_stage =
+            branch_cfg
+                .stages
+                .get(from_idx + 1)
+                .ok_or_else(|| PromoteError::NoNextStage {
+                    pipeline: "branch".to_string(),
+                    stage: from.to_string(),
+                })?;
 
         // Verify promote.lock hash before deferring.
         let lock = domain::promote_lock::PromoteLock::read(repo_root)?;

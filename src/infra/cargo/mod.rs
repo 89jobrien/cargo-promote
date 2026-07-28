@@ -18,10 +18,7 @@ impl Publisher for CargoPublisher {
         // Use explicit cargo_name if set, otherwise fall back to the
         // registry name itself so we never rely on cargo's default
         // registry setting.
-        let cargo_name = registry
-            .cargo_name
-            .as_deref()
-            .unwrap_or(&registry.name);
+        let cargo_name = registry.cargo_name.as_deref().unwrap_or(&registry.name);
         cmd.arg("--registry").arg(cargo_name);
 
         cmd.arg("--manifest-path").arg(&krate.manifest_path);

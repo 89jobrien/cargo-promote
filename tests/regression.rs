@@ -1,4 +1,4 @@
-/// Regression tests for bugs fixed in the 2026-06-01 session.
+//! Regression tests for bugs fixed in the 2026-06-01 session.
 
 mod auth_header {
     use cargo_promote::infra::git::gitea::GiteaRegistry;
@@ -46,8 +46,7 @@ mod crate_exists_url {
         let version = "0.1.0";
         let url = format!("{api_url}/{name}/{version}");
         assert_eq!(
-            url,
-            "http://host:3000/api/packages/joe/cargo/mycrate/0.1.0",
+            url, "http://host:3000/api/packages/joe/cargo/mycrate/0.1.0",
             "must not contain /api/packages twice"
         );
         assert_eq!(
@@ -88,9 +87,6 @@ mod cargo_publisher_registry {
             confirm: false,
         };
         let cargo_name = reg.cargo_name.as_deref().unwrap_or(&reg.name);
-        assert_eq!(
-            cargo_name, "private-reg",
-            "must prefer cargo_name when set"
-        );
+        assert_eq!(cargo_name, "private-reg", "must prefer cargo_name when set");
     }
 }

@@ -2,9 +2,9 @@ use anyhow::Context;
 use std::fs;
 use std::path::PathBuf;
 
+use crate::domain::PromoteError;
 use crate::domain::deferral::{Deferral, DeferralStatus};
 use crate::domain::traits::DeferralStore;
-use crate::domain::PromoteError;
 
 const DEFERRALS_DIR: &str = ".promote/deferrals";
 
@@ -157,11 +157,7 @@ status = "pending"
 deferred_at = "20260531.185400"
 source_hash = "sha256:abc123"
 "#;
-        fs::write(
-            deferrals_dir.join("d-20260531.185400-noprt.toml"),
-            content,
-        )
-        .unwrap();
+        fs::write(deferrals_dir.join("d-20260531.185400-noprt.toml"), content).unwrap();
 
         let s = store(dir.path());
         let d = s.load("d-20260531.185400-noprt").unwrap();
@@ -250,11 +246,7 @@ status = "pending"
 deferred_at = "20260531.185400"
 source_hash = "sha256:abc123"
 "#;
-        fs::write(
-            deferrals_dir.join("d-20260531.185400-legacy.toml"),
-            content,
-        )
-        .unwrap();
+        fs::write(deferrals_dir.join("d-20260531.185400-legacy.toml"), content).unwrap();
 
         let s = store(dir.path());
         let d = s.load("d-20260531.185400-legacy").unwrap();
