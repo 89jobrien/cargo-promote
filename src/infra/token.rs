@@ -1,6 +1,6 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use secrecy::{ExposeSecret, SecretString};
 
@@ -17,7 +17,7 @@ type EnvLookup = Box<dyn Fn(&str) -> Option<String> + Send + Sync>;
 pub struct CargoTokenResolver {
     credentials_path: PathBuf,
     env_lookup: EnvLookup,
-    cache: RefCell<HashMap<String, Option<String>>>,
+    cache: Mutex<HashMap<String, Option<String>>>,
 }
 
 impl Default for CargoTokenResolver {
@@ -32,7 +32,7 @@ impl CargoTokenResolver {
         Self {
             credentials_path: PathBuf::from(home).join(".cargo/credentials.toml"),
             env_lookup: Box::new(|key| std::env::var(key).ok()),
-            cache: RefCell::new(HashMap::new()),
+            cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -41,7 +41,7 @@ impl CargoTokenResolver {
         Self {
             credentials_path: path,
             env_lookup: Box::new(|key| std::env::var(key).ok()),
-            cache: RefCell::new(HashMap::new()),
+            cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -51,7 +51,7 @@ impl CargoTokenResolver {
         Self {
             credentials_path: path,
             env_lookup: Box::new(env_lookup),
-            cache: RefCell::new(HashMap::new()),
+            cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -66,11 +66,11 @@ impl CargoTokenResolver {
 impl TokenResolver for CargoTokenResolver {
     // qual:allow(iosp) reason: "I/O boundary — env lookup + file fallback"
     fn resolve(&self, registry_name: &str) -> Result<Option<SecretString>, PromoteError> {
-        if let Some(cached) = self.cache.borrow().get(registry_name) {
+        if let Some(cached) = self.cache.lock().unwrap().get(registry_name) {
             return Ok(cached.as_ref().map(|s| SecretString::from(s.clone())));
         }
         let result = self.resolve_uncached(registry_name)?;
-        self.cache.borrow_mut().insert(
+        self.cache.lock().unwrap().insert(
             registry_name.to_string(),
             result.as_ref().map(|s| s.expose_secret().to_string()),
         );
@@ -83,19 +83,18 @@ impl CargoTokenResolver {
     fn resolve_uncached(&self, registry_name: &str) -> Result<Option<SecretString>, PromoteError> {
         // 1. Check CARGO_REGISTRIES_{NAME}_TOKEN
         let env_key = Self::env_var_name(registry_name);
-        if let Some(val) = (self.env_lookup)(&env_key) {
-            if !val.is_empty() {
-                return Ok(Some(SecretString::from(val)));
-            }
+        if let Some(val) = (self.env_lookup)(&env_key)
+            && !val.is_empty()
+        {
+            return Ok(Some(SecretString::from(val)));
         }
 
         // 2. For crates-io, also check CARGO_REGISTRY_TOKEN
-        if registry_name == "crates-io" {
-            if let Some(val) = (self.env_lookup)("CARGO_REGISTRY_TOKEN") {
-                if !val.is_empty() {
-                    return Ok(Some(SecretString::from(val)));
-                }
-            }
+        if registry_name == "crates-io"
+            && let Some(val) = (self.env_lookup)("CARGO_REGISTRY_TOKEN")
+            && !val.is_empty()
+        {
+            return Ok(Some(SecretString::from(val)));
         }
 
         // 3. Fall back to credentials.toml

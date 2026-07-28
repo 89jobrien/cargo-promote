@@ -674,4 +674,154 @@ mod tests {
         );
         assert!(matches!(result, Err(PromoteError::NoNextStage { .. })));
     }
+
+    // ── BranchPipeline::ci_promote tests ──────────────────────────
+
+    use crate::domain::traits::{CiBranchPromoter, FfStatus, RailBumper};
+
+    struct MockCiBranchPromoter {
+        ff_status: FfStatus,
+        calls: RefCell<Vec<String>>,
+    }
+
+    impl MockCiBranchPromoter {
+        fn new(ff_status: FfStatus) -> Self {
+            Self {
+                ff_status,
+                calls: RefCell::new(Vec::new()),
+            }
+        }
+
+        fn calls(&self) -> Vec<String> {
+            self.calls.borrow().clone()
+        }
+    }
+
+    impl CiBranchPromoter for MockCiBranchPromoter {
+        fn fetch(&self, _remote: &str, _branches: &[&str]) -> Result<(), PromoteError> {
+            self.calls.borrow_mut().push("fetch".to_string());
+            Ok(())
+        }
+
+        fn remote_sha(&self, _remote: &str, _branch: &str) -> Result<String, PromoteError> {
+            self.calls.borrow_mut().push("remote_sha".to_string());
+            Ok("abc1234".to_string())
+        }
+
+        fn ff_status(
+            &self,
+            _remote: &str,
+            _from: &str,
+            _to: &str,
+        ) -> Result<FfStatus, PromoteError> {
+            self.calls.borrow_mut().push("ff_status".to_string());
+            Ok(self.ff_status)
+        }
+
+        fn checkout_and_ff_merge(
+            &self,
+            _remote: &str,
+            _from: &str,
+            _to: &str,
+        ) -> Result<(), PromoteError> {
+            self.calls
+                .borrow_mut()
+                .push("checkout_and_ff_merge".to_string());
+            Ok(())
+        }
+
+        fn push_branch_to(&self, _remote: &str, _branch: &str) -> Result<(), PromoteError> {
+            self.calls.borrow_mut().push("push_branch_to".to_string());
+            Ok(())
+        }
+
+        fn push_all_tags_to(&self, _remote: &str) -> Result<(), PromoteError> {
+            self.calls.borrow_mut().push("push_all_tags_to".to_string());
+            Ok(())
+        }
+    }
+
+    struct MockRailBumper {
+        version: String,
+        calls: RefCell<Vec<String>>,
+    }
+
+    impl MockRailBumper {
+        fn new(version: &str) -> Self {
+            Self {
+                version: version.to_string(),
+                calls: RefCell::new(Vec::new()),
+            }
+        }
+    }
+
+    impl RailBumper for MockRailBumper {
+        fn patch_bump(&self, package: &str) -> Result<String, PromoteError> {
+            self.calls.borrow_mut().push("patch_bump".to_string());
+            let _ = package;
+            Ok(self.version.clone())
+        }
+    }
+
+    #[test]
+    fn ci_promote_in_sync_is_noop() {
+        let promoter = MockCiBranchPromoter::new(FfStatus::InSync);
+        let bumper = MockRailBumper::new("0.2.0");
+
+        let result =
+            BranchPipeline::ci_promote("origin", "develop", "main", "foo", false, &promoter, &bumper);
+
+        assert!(matches!(result, Ok(None)));
+        assert_eq!(promoter.calls(), vec!["fetch", "remote_sha", "ff_status"]);
+        assert!(bumper.calls.borrow().is_empty());
+    }
+
+    #[test]
+    fn ci_promote_diverged_errors() {
+        let promoter = MockCiBranchPromoter::new(FfStatus::Diverged);
+        let bumper = MockRailBumper::new("0.2.0");
+
+        let result =
+            BranchPipeline::ci_promote("origin", "develop", "main", "foo", false, &promoter, &bumper);
+
+        assert!(result.is_err());
+        assert_eq!(promoter.calls(), vec!["fetch", "remote_sha", "ff_status"]);
+        assert!(bumper.calls.borrow().is_empty());
+    }
+
+    #[test]
+    fn ci_promote_dry_run_short_circuits() {
+        let promoter = MockCiBranchPromoter::new(FfStatus::Promotable);
+        let bumper = MockRailBumper::new("0.2.0");
+
+        let result =
+            BranchPipeline::ci_promote("origin", "develop", "main", "foo", true, &promoter, &bumper);
+
+        assert!(matches!(result, Ok(None)));
+        assert_eq!(promoter.calls(), vec!["fetch", "remote_sha", "ff_status"]);
+        assert!(bumper.calls.borrow().is_empty());
+    }
+
+    #[test]
+    fn ci_promote_happy_path_merges_bumps_and_pushes() {
+        let promoter = MockCiBranchPromoter::new(FfStatus::Promotable);
+        let bumper = MockRailBumper::new("0.2.0");
+
+        let result =
+            BranchPipeline::ci_promote("origin", "develop", "main", "foo", false, &promoter, &bumper);
+
+        assert_eq!(result.unwrap(), Some("0.2.0".to_string()));
+        assert_eq!(
+            promoter.calls(),
+            vec![
+                "fetch",
+                "remote_sha",
+                "ff_status",
+                "checkout_and_ff_merge",
+                "push_branch_to",
+                "push_all_tags_to",
+            ]
+        );
+        assert_eq!(bumper.calls.borrow().as_slice(), &["patch_bump"]);
+    }
 }

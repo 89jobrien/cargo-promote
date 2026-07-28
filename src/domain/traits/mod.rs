@@ -143,7 +143,7 @@ pub trait Notifier {
 }
 
 /// Result of a fast-forward feasibility check.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FfStatus {
     /// Both refs point to the same commit — nothing to promote.
     InSync,
