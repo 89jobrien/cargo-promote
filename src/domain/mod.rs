@@ -32,6 +32,34 @@ pub struct Registry {
     pub confirm: bool,
 }
 
+// qual:allow reason: "builder pattern replaces repeated struct literals across config"
+impl Registry {
+    pub fn new(name: impl Into<String>) -> Self {
+        let name = name.into();
+        Self {
+            cargo_name: Some(name.clone()),
+            name,
+            api_url: None,
+            confirm: false,
+        }
+    }
+
+    pub fn with_api_url(mut self, url: impl Into<String>) -> Self {
+        self.api_url = Some(url.into());
+        self
+    }
+
+    pub fn with_confirm(mut self) -> Self {
+        self.confirm = true;
+        self
+    }
+
+    pub fn without_cargo_name(mut self) -> Self {
+        self.cargo_name = None;
+        self
+    }
+}
+
 /// A stage in a promotion pipeline — publish to one registry.
 #[derive(Debug, Clone)]
 pub struct Stage {
@@ -82,6 +110,18 @@ pub enum PromoteError {
 
     #[error("stage '{stage}' is the last stage in pipeline '{pipeline}' — nothing to promote to")]
     NoNextStage { pipeline: String, stage: String },
+
+    #[error("registry '{name}' not found in configuration")]
+    RegistryNotFound { name: String },
+
+    #[error("pipeline '{name}' not found in configuration")]
+    PipelineNotFound { name: String },
+
+    #[error("branch pipeline not configured in promote.toml")]
+    BranchPipelineNotConfigured,
+
+    #[error("unknown bump level '{level}', expected patch|minor|major")]
+    UnknownBumpLevel { level: String },
 
     #[error("user aborted")]
     Aborted,
