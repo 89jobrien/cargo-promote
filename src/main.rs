@@ -1,7 +1,7 @@
 mod cli;
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use std::path::PathBuf;
 
 use cargo_promote::{
@@ -16,6 +16,16 @@ fn api_for(path: Option<&std::path::Path>, cwd: &std::path::Path) -> Result<Api>
 }
 
 fn main() -> Result<()> {
+    if std::env::args().nth(1).as_deref() == Some("completions") {
+        clap_complete::generate(
+            clap_complete_nushell::Nushell,
+            &mut Cli::command(),
+            "cargo-promote",
+            &mut std::io::stdout(),
+        );
+        return Ok(());
+    }
+
     let cli = Cli::parse();
     let cwd = std::env::current_dir().context("cannot determine current directory")?;
 
