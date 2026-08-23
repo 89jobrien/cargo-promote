@@ -14,14 +14,16 @@ pub enum BumpLevel {
 }
 
 impl FromStr for BumpLevel {
-    type Err = anyhow::Error;
+    type Err = super::PromoteError;
 
-    fn from_str(s: &str) -> Result<Self> {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
             "patch" => Ok(Self::Patch),
             "minor" => Ok(Self::Minor),
             "major" => Ok(Self::Major),
-            _ => anyhow::bail!("unknown bump level '{s}', expected patch|minor|major"),
+            _ => Err(super::PromoteError::UnknownBumpLevel {
+                level: s.to_string(),
+            }),
         }
     }
 }
@@ -64,6 +66,15 @@ pub fn bump_manifest_version(manifest_path: &Path, level: BumpLevel) -> Result<(
         let old = manifest
             .get_workspace_version()
             .context("version.workspace = true but no [workspace.package].version found")?;
+        let new = bump_version(&old, level);
+        manifest.set_workspace_version(&new);
+        manifest.write()?;
+        Ok((old, new))
+    } else if manifest.package_name().is_none() {
+        // Virtual workspace manifest (has [workspace] but no [package]).
+        let old = manifest
+            .get_workspace_version()
+            .context("virtual workspace has no [workspace.package].version")?;
         let new = bump_version(&old, level);
         manifest.set_workspace_version(&new);
         manifest.write()?;
@@ -166,12 +177,34 @@ mod tests {
     }
 
     #[test]
-    fn bump_manifest_version_own_cargo_toml_is_valid() {
-        // Verify we can call it on this project's own Cargo.toml (read-only check)
+    fn bump_manifest_version_virtual_workspace() {
+        let dir = std::env::temp_dir().join("cargo-promote-test-virtual-ws");
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest = dir.join("Cargo.toml");
+        std::fs::write(
+            &manifest,
+            "[workspace]\nmembers = [\"a\", \"b\"]\n\n[workspace.package]\nversion = \"2.0.0\"\n",
+        )
+        .unwrap();
+
+        let (old, new) = bump_manifest_version(&manifest, BumpLevel::Minor).unwrap();
+        assert_eq!(old, Version::new(2, 0, 0));
+        assert_eq!(new, Version::new(2, 1, 0));
+
+        let content = std::fs::read_to_string(&manifest).unwrap();
+        assert!(content.contains("version = \"2.1.0\""));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn bump_version_on_own_cargo_toml_version() {
         let manifest = PathBuf::from("Cargo.toml");
         let content = std::fs::read_to_string(&manifest).unwrap();
         let doc: toml_edit::DocumentMut = content.parse().unwrap();
         let version_str = doc["package"]["version"].as_str().unwrap();
-        let _v = Version::parse(version_str).expect("own version should be valid semver");
+        let v = Version::parse(version_str).expect("own version should be valid semver");
+        let bumped = bump_version(&v, BumpLevel::Patch);
+        assert!(bumped > v, "patch bump should increase version");
     }
 }

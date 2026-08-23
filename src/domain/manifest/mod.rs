@@ -1,6 +1,6 @@
 use super::CrateRef;
 use super::local_manifest::LocalManifest;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::path::{Path, PathBuf};
 
 /// Resolve a CrateRef from a manifest path and optional package name.
@@ -11,13 +11,20 @@ pub fn resolve_crate(path: Option<&Path>, package: Option<&str>) -> Result<Crate
     let (name, version) = if let Some(pkg_name) = package {
         let ver = manifest.package_version().unwrap_or("0.0.0").to_string();
         (pkg_name.to_string(), ver)
-    } else {
-        let n = manifest
-            .package_name()
-            .context("missing package.name")?
-            .to_string();
+    } else if let Some(n) = manifest.package_name() {
         let v = manifest.package_version().unwrap_or("0.0.0").to_string();
-        (n, v)
+        (n.to_string(), v)
+    } else if let Some(ws_ver) = manifest.get_workspace_version() {
+        // Virtual workspace manifest — derive name from directory.
+        let name = manifest_path
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+            .unwrap_or("workspace")
+            .to_string();
+        (name, ws_ver.to_string())
+    } else {
+        anyhow::bail!("missing package.name in {}", manifest_path.display());
     };
 
     Ok(CrateRef {

@@ -1,81 +1,108 @@
 project: cargo-promote
-id: cargo-p
-updated: 20260610.072040
+id: cargo-promote
+updated: 2026-08-23
+branch: develop
+head_sha: d98ca64782d2f35e0e34fbea66676a1d5babbd2f
+remote_status: in-sync with origin/develop
+main_vs_github_main: main is ahead by 2 commits
+commits_since_last_handoff: 1 (d98ca64 feat: add Nushell completion generation)
+
 items:
-- id: CP-001
+- id: uncommitted-work
   doob_uuid: null
-  name: null
-  priority: P2
-  status: open
-  title: Expose promotion pipeline as a Rust library API
-  description: |
-    cargo-promote is currently CLI-only. A stable lib surface would allow downstream crates
-    (e.g. release orchestrators) to drive pipelines programmatically. The promote! macro
-    (docs/ideas.md) depends on this.
-  files:
-  - src/lib.rs
-  - docs/ideas.md
-  completed: null
-  extra: []
-- id: CP-002
-  doob_uuid: null
-  name: null
-  priority: P2
-  status: open
-  title: Expose Tailscale funnel / public endpoint for cratebox
-  description: |
-    GitHub Actions release workflows are blocked because the Gitea registry is
-    Tailscale-only. Expose via Tailscale funnel or Caddy reverse proxy to re-enable
-    CI-driven publishes.
-  files:
-  - CLAUDE.md
-  completed: null
-  extra: []
-- id: CP-003
-  doob_uuid: null
-  name: null
+  name: uncommitted-work
   priority: P1
   status: open
-  title: Add GitHub Actions CI workflow
-  description: |
-    No .github/workflows/ directory exists. CI is not configured. Need at minimum a
-    ci.yml with cargo check, clippy, and test gates on push/PR to develop and main.
+  title: Uncommitted changes (12 modified, 6 untracked)
+  description: |-
+    Working tree has uncommitted changes:
+
+    Modified (12):
+    - .ctx/GODMODE.session.json (instrumentation/tracing)
+    - .ctx/GODMODE.trace.jsonl (instrumentation/tracing)
+    - .ctx/HANDOFF.cargo-promote.cargo-promote.yaml (this file)
+    - .gitignore (git)
+    - Cargo.lock (lockfile)
+    - rustqual.toml (linting config)
+    - src/config/mod.rs (domain code)
+    - src/domain/manifest/mod.rs (domain code)
+    - src/domain/promote_lock.rs (domain code)
+    - src/domain/version.rs (domain code)
+    - src/infra/registry_cache.rs (infra code)
+    - tests/regression.rs (tests)
+
+    Untracked (6):
+    - .agents/ (directory)
+    - .ctx/HANDOFF.tools.yaml (handoff config)
+    - .litho/ (directory)
+    - AGENTS.md (documentation)
+    - docs/plans/2026-06-04-workspace-support.md (planning doc)
+    - litho.toml (linting config)
   files:
-  - .github/workflows/ci.yml
+  - .ctx/GODMODE.session.json
+  - .ctx/GODMODE.trace.jsonl
+  - .ctx/HANDOFF.cargo-promote.cargo-promote.yaml
+  - .gitignore
+  - Cargo.lock
+  - rustqual.toml
+  - src/config/mod.rs
+  - src/domain/manifest/mod.rs
+  - src/domain/promote_lock.rs
+  - src/domain/version.rs
+  - src/infra/registry_cache.rs
+  - tests/regression.rs
+  - .agents/
+  - .ctx/HANDOFF.tools.yaml
+  - .litho/
+  - AGENTS.md
+  - docs/plans/2026-06-04-workspace-support.md
+  - litho.toml
   completed: null
   extra: []
+
+- id: test-status
+  doob_uuid: null
+  name: test-status
+  priority: P1
+  status: closed
+  title: Library tests passing
+  description: |-
+    Ran `cargo test --lib`. Results:
+    - 104 tests passed
+    - 0 failures
+    - All pre-commit hooks passed
+    - Secret scan (obfsck) passed
+    - gitleaks scan passed
+    Status: HEALTHY
+  completed: '2026-08-23T04:29:00Z'
+  extra: []
+
+- id: recent-work-context
+  doob_uuid: null
+  name: recent-work-context
+  priority: P2
+  status: open
+  title: Recent work summary
+  description: |-
+    Latest commit: d98ca64 feat: add Nushell completion generation
+
+    The crate is on the `develop` branch and tracking `origin/develop`.
+
+    Main branch is ahead of github/main by 2 commits — this suggests
+    pending PR or local feature work not yet pushed to GitHub.
+
+    Modified files are a mix of domain code, test regressions, and
+    config/build artifacts. No apparent blockers.
+
+    Architecture is stable (hexagonal/ports-and-adapters pattern).
+    Primary operations: crate publishing to cratebox registry and
+    promotion to crates.io.
+  completed: null
+  extra: []
+
 log:
-- date: 20260610::072040
-  summary: Added ci-promote subcommand (FF-merge develop→main, rail patch bump, push tags); identified missing CI workflows
+- date: '20260823.042900'
+  summary: "done=1 running=0 pending=2 blocked=0"
   commits:
-  - sha: 17ed438248e544b49c694aeb6e23122dfac588b1
-    branch: develop
-  - sha: 203930741e21176dbf92103a1870ae34dab7af3f
-    branch: develop
-  - sha: b9e44ed3aae3591ebd0bab1261f772b1f1b7d4dd
-    branch: develop
-  session: 7
-- date: 20260531::190558
-  summary: 'Session handoff: CP-003 complete, updated HANDOFF, state file, .gitignore patterns'
-  commits: []
-  session: 6
-- date: 20260531::185800
-  summary: 'Implemented branch promotion pipeline: PromoteLock, BranchMerger/RemotePusher/Tagger ports, GitCli adapters, BranchPipeline orchestrator, bump/branch commands. All 53 tests passing.'
-  commits: []
-  session: 5
-- date: 20260531::185414
-  summary: Designed branch promotion pipeline, approved design doc, updated default stages to develop/staging/production
-  commits: []
-  session: 4
-- date: 20260531::173329
-  summary: Added autobump config, validated promotion pipeline, renamed registry to cratebox, set up sparkfile CI
-  commits: []
-  session: 3
-- date: 20260531::000000
-  summary: Added publish-all with topological dep ordering
-  commits: []
-  session: 2
-- date: 20260530::000000
-  summary: Scaffolded cargo-promote CLI and minibox registry infra
-  commits: []
-  session: 1
+  - d98ca64 feat: add Nushell completion generation
+  tests_run: 104 passed, 0 failed

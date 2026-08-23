@@ -4,6 +4,12 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Returns true if the root `Cargo.toml` declares a `[workspace]` section.
+fn is_workspace(root: &Path) -> bool {
+    let content = fs::read_to_string(root.join("Cargo.toml")).unwrap_or_default();
+    content.contains("[workspace]")
+}
+
 const PROMOTE_LOCK_FILENAME: &str = "promote.lock";
 
 /// The promote.lock file — prevents code from changing mid-pipeline.
@@ -38,8 +44,39 @@ impl PromoteLock {
             files.push(cargo_lock);
         }
 
-        if let Ok(entries) = fs::read_dir(repo_root.join("src")) {
-            Self::collect_rust_files(entries, &mut files)?;
+        if is_workspace(repo_root) {
+            let metadata = cargo_metadata::MetadataCommand::new()
+                .manifest_path(repo_root.join("Cargo.toml"))
+                .no_deps()
+                .exec()
+                .context("cannot read workspace metadata")?;
+
+            let mut member_dirs: Vec<PathBuf> = metadata
+                .workspace_packages()
+                .into_iter()
+                .map(|p| {
+                    p.manifest_path
+                        .parent()
+                        .expect("manifest path has no parent")
+                        .to_path_buf()
+                        .into()
+                })
+                .collect();
+            member_dirs.sort();
+
+            for member_dir in member_dirs {
+                let member_toml = member_dir.join("Cargo.toml");
+                if member_toml.exists() {
+                    files.push(member_toml);
+                }
+                if let Ok(entries) = fs::read_dir(member_dir.join("src")) {
+                    Self::collect_rust_files(entries, &mut files)?;
+                }
+            }
+        } else {
+            if let Ok(entries) = fs::read_dir(repo_root.join("src")) {
+                Self::collect_rust_files(entries, &mut files)?;
+            }
         }
 
         files.sort();
@@ -141,6 +178,40 @@ mod tests {
         let hash1 = PromoteLock::compute_source_hash(root).unwrap();
         let hash2 = PromoteLock::compute_source_hash(root).unwrap();
         assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn source_hash_workspace_includes_member_src() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+
+        // Create a minimal workspace with one member
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crate-a\"]\nresolver = \"2\"\n",
+        )
+        .unwrap();
+        let member_dir = root.join("crate-a");
+        fs::create_dir(&member_dir).unwrap();
+        fs::write(
+            member_dir.join("Cargo.toml"),
+            "[package]\nname = \"crate-a\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .unwrap();
+        fs::create_dir(member_dir.join("src")).unwrap();
+        fs::write(member_dir.join("src/lib.rs"), "pub fn hello() {}").unwrap();
+
+        let hash = PromoteLock::compute_source_hash(root).unwrap();
+        assert!(hash.starts_with("sha256:"));
+
+        // Hash changes when member source changes
+        fs::write(
+            member_dir.join("src/lib.rs"),
+            "pub fn hello() { /* changed */ }",
+        )
+        .unwrap();
+        let hash2 = PromoteLock::compute_source_hash(root).unwrap();
+        assert_ne!(hash, hash2, "hash must change when member source changes");
     }
 
     #[test]

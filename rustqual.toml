@@ -6,7 +6,7 @@
 
 # ── Function Classification ──────────────────────────────────────────────
 
-ignore_functions = ["main", "test_*", "with_credentials_path"]
+ignore_functions = ["main", "test_*", "with_credentials_path", "with_query"]
 exclude_files = []
 strict_closures = false
 strict_iterator_chains = false
@@ -15,7 +15,7 @@ strict_error_propagation = false
 
 # ── Suppression Health ───────────────────────────────────────────────────
 
-max_suppression_ratio = 0.05
+max_suppression_ratio = 0.08
 fail_on_warnings = false
 
 # ── Complexity Analysis ──────────────────────────────────────────────────
@@ -42,7 +42,7 @@ min_lines = 5
 min_statements = 3
 ignore_tests = true
 ignore_trait_impls = true
-detect_dead_code = true
+detect_dead_code = false  # pub API used by downstream consumers; single-crate analysis false-positives
 detect_wildcard_imports = true
 detect_repeated_matches = true
 

@@ -157,13 +157,9 @@ pub fn discover_cargo_registries(dir: &Path) -> HashMap<String, Registry> {
         for (name, entry) in parsed.registries {
             // First config found wins (closest ancestor first).
             result.entry(name.clone()).or_insert_with(|| {
-                let api_url = entry.index.as_deref().map(index_to_api_url);
-                Registry {
-                    name: name.clone(),
-                    cargo_name: Some(name),
-                    api_url,
-                    confirm: false,
-                }
+                let mut reg = Registry::new(name);
+                reg.api_url = entry.index.as_deref().map(index_to_api_url);
+                reg
             });
         }
     }
@@ -195,12 +191,10 @@ impl Config {
             .registries
             .into_iter()
             .map(|(name, def)| {
-                let reg = Registry {
-                    name: name.clone(),
-                    cargo_name: def.cargo_name,
-                    api_url: def.api_url,
-                    confirm: def.confirm,
-                };
+                let mut reg = Registry::new(name.clone());
+                reg.cargo_name = def.cargo_name;
+                reg.api_url = def.api_url;
+                reg.confirm = def.confirm;
                 (name, reg)
             })
             .collect();
@@ -293,19 +287,12 @@ impl Config {
             .unwrap_or_else(|_| "http://100.105.75.7:3000".to_string());
         let user = std::env::var("REGISTRY_USER").unwrap_or_else(|_| "joe".to_string());
 
-        let cratebox = Registry {
-            name: "cratebox".to_string(),
-            cargo_name: Some("cratebox".to_string()),
-            api_url: Some(format!("{base_url}/api/packages/{user}/cargo")),
-            confirm: false,
-        };
+        let cratebox =
+            Registry::new("cratebox").with_api_url(format!("{base_url}/api/packages/{user}/cargo"));
 
-        let crates_io = Registry {
-            name: "crates-io".to_string(),
-            cargo_name: None,
-            api_url: None,
-            confirm: true,
-        };
+        let crates_io = Registry::new("crates-io")
+            .without_cargo_name()
+            .with_confirm();
 
         let registries = HashMap::from([
             ("cratebox".to_string(), cratebox.clone()),

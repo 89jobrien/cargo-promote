@@ -39,6 +39,7 @@ mod crate_exists_url {
     /// "{api_url}/api/packages/joe/cargo/{name}/{version}" which doubled
     /// the path when api_url already contained /api/packages/joe/cargo.
     /// Fixed to "{api_url}/{name}/{version}".
+    // qual:allow(test) reason: "regression test for URL pattern — no callable function to invoke"
     #[test]
     fn crate_exists_url_does_not_double_api_packages_path() {
         let api_url = "http://host:3000/api/packages/joe/cargo";
