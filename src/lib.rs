@@ -1,3 +1,5 @@
+//! Programmatic API for publishing and promoting crates through configured pipelines.
+
 pub mod config;
 pub mod domain;
 pub mod infra;
@@ -128,41 +130,49 @@ pub struct ApiBuilder {
 
 // qual:allow reason: "intentional builder pattern — derive_builder not warranted"
 impl ApiBuilder {
+    /// Sets the promotion configuration.
     pub fn config(mut self, config: Config) -> Self {
         self.config = Some(config);
         self
     }
 
+    /// Sets the pipeline runner.
     pub fn engine(mut self, engine: Box<dyn PipelineRunner>) -> Self {
         self.engine = Some(engine);
         self
     }
 
+    /// Sets the registry query adapter.
     pub fn registry_query(mut self, query: Box<dyn RegistryQuery>) -> Self {
         self.registry_query = Some(query);
         self
     }
 
+    /// Sets the deferral notifier.
     pub fn notifier(mut self, notifier: Box<dyn Notifier>) -> Self {
         self.notifier = Some(notifier);
         self
     }
 
+    /// Sets the code-forge adapter.
     pub fn forge(mut self, forge: Box<dyn Forge>) -> Self {
         self.forge = Some(forge);
         self
     }
 
+    /// Sets the local Git adapter.
     pub fn git(mut self, git: Box<dyn GitOps>) -> Self {
         self.git = Some(git);
         self
     }
 
+    /// Sets the deferral ticket store.
     pub fn deferral_store(mut self, store: Box<dyn DeferralStore>) -> Self {
         self.deferral_store = Some(store);
         self
     }
 
+    /// Builds an API from the configured dependencies.
     pub fn build(self) -> Result<Api> {
         Ok(Api {
             config: self

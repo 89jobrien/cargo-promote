@@ -1,3 +1,5 @@
+//! Applies semantic version bumps to package and workspace manifests.
+
 use anyhow::{Context, Result};
 use semver::Version;
 use std::path::Path;

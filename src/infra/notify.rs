@@ -1,3 +1,5 @@
+//! Command-spawning and no-op adapters for deferral notifications.
+
 use crate::domain::PromoteError;
 use crate::domain::deferral::Deferral;
 use crate::domain::traits::Notifier;

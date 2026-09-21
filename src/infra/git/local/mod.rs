@@ -1,3 +1,5 @@
+//! Git CLI adapter for branch, tag, commit, and push operations.
+
 use crate::domain::PromoteError;
 use crate::domain::traits::{
     BranchMerger, CiBranchPromoter, FfStatus, GitCommitter, RemotePusher, Tagger,
@@ -12,6 +14,7 @@ pub struct LocalGit {
 }
 
 impl LocalGit {
+    /// Creates a Git adapter rooted at the target repository.
     pub fn new(repo_root: PathBuf) -> Self {
         Self { repo_root }
     }

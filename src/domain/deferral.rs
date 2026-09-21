@@ -1,3 +1,5 @@
+//! Deferred-promotion ticket data and state transitions.
+
 use serde::{Deserialize, Serialize};
 
 use super::PromoteError;

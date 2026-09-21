@@ -14,7 +14,7 @@ one hop.
 
 ## Mental Model
 
-```
+```text
 feature branch
     |
     v
@@ -64,12 +64,14 @@ Standalone version bump for use in CI:
 1. Bump version in `Cargo.toml` (level from config or CLI arg).
 2. Compute source hash of publishable files (`src/`, `Cargo.toml`, `Cargo.lock`).
 3. Write `promote.lock`:
+
    ```yaml
    version: "0.2.0"
    source_hash: "sha256:abc123..."
    bumped_at: "20260531::180000"
    entered_pipeline: "develop"
    ```
+
 4. Commit both `Cargo.toml` and `promote.lock`.
 5. Push.
 

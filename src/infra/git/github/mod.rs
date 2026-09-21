@@ -1,3 +1,5 @@
+//! Queries crate information from the GitHub packages API.
+
 use crate::domain::traits::RegistryQuery;
 use crate::domain::{CrateInfo, PromoteError, Registry};
 use std::process::Command;

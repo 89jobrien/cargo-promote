@@ -1,11 +1,13 @@
 project: cargo-promote
 id: cargo-promote
-updated: 2026-08-23
+updated: 2026-09-06
 branch: develop
-head_sha: d98ca64782d2f35e0e34fbea66676a1d5babbd2f
-remote_status: in-sync with origin/develop
-main_vs_github_main: main is ahead by 2 commits
-commits_since_last_handoff: 1 (d98ca64 feat: add Nushell completion generation)
+head_sha: 35c0485955d5d0a8ff927384711b2142c9030ae6
+remote_status: ahead of local origin/develop by 1 commit; no fetch performed
+commits_since_last_handoff: 0
+commits_since_last_handoff_basis: >-
+  The latest committed change to this handoff path is 35c0485
+  (chore(handoff): session-end update), and that commit is current HEAD.
 
 items:
 - id: uncommitted-work
@@ -13,44 +15,26 @@ items:
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (12 modified, 6 untracked)
+  title: Uncommitted changes (3 modified, 6 untracked; none staged)
   description: |-
-    Working tree has uncommitted changes:
+    Modified:
+    - .ctx/HANDOFF.cargo-promote.cargo-promote.yaml (this update)
+    - CLAUDE.md (architecture, flags, config, and agent-guidance documentation)
+    - Cargo.lock (completion dependency lock entries)
 
-    Modified (12):
-    - .ctx/GODMODE.session.json (instrumentation/tracing)
-    - .ctx/GODMODE.trace.jsonl (instrumentation/tracing)
-    - .ctx/HANDOFF.cargo-promote.cargo-promote.yaml (this file)
-    - .gitignore (git)
-    - Cargo.lock (lockfile)
-    - rustqual.toml (linting config)
-    - src/config/mod.rs (domain code)
-    - src/domain/manifest/mod.rs (domain code)
-    - src/domain/promote_lock.rs (domain code)
-    - src/domain/version.rs (domain code)
-    - src/infra/registry_cache.rs (infra code)
-    - tests/regression.rs (tests)
+    Untracked:
+    - .agents/ (skills directory)
+    - .ctx/HANDOFF.tools.yaml (tool-usage handoff report)
+    - .litho/ (cache directory)
+    - AGENTS.md (pointer to CLAUDE.md)
+    - docs/plans/2026-06-04-workspace-support.md (draft plan)
+    - litho.toml (documentation/lint configuration)
 
-    Untracked (6):
-    - .agents/ (directory)
-    - .ctx/HANDOFF.tools.yaml (handoff config)
-    - .litho/ (directory)
-    - AGENTS.md (documentation)
-    - docs/plans/2026-06-04-workspace-support.md (planning doc)
-    - litho.toml (linting config)
+    These pre-existing changes were preserved. No files were staged.
   files:
-  - .ctx/GODMODE.session.json
-  - .ctx/GODMODE.trace.jsonl
   - .ctx/HANDOFF.cargo-promote.cargo-promote.yaml
-  - .gitignore
+  - CLAUDE.md
   - Cargo.lock
-  - rustqual.toml
-  - src/config/mod.rs
-  - src/domain/manifest/mod.rs
-  - src/domain/promote_lock.rs
-  - src/domain/version.rs
-  - src/infra/registry_cache.rs
-  - tests/regression.rs
   - .agents/
   - .ctx/HANDOFF.tools.yaml
   - .litho/
@@ -64,17 +48,55 @@ items:
   doob_uuid: null
   name: test-status
   priority: P1
-  status: closed
-  title: Library tests passing
+  status: open
+  title: Tests not run for this handoff update
   description: |-
-    Ran `cargo test --lib`. Results:
-    - 104 tests passed
-    - 0 failures
-    - All pre-commit hooks passed
-    - Secret scan (obfsck) passed
-    - gitleaks scan passed
-    Status: HEALTHY
-  completed: '2026-08-23T04:29:00Z'
+    No build, test, clippy, or formatting command was run while preparing
+    this update. Current pass/fail status is therefore not asserted.
+  completed: null
+  extra: []
+
+- id: version-state
+  doob_uuid: null
+  name: version-state
+  priority: P2
+  status: closed
+  title: Version numbers touched by the working diff
+  description: |-
+    Cargo.lock adds resolved versions clap_complete 4.6.8 and
+    clap_complete_nushell 4.6.1. Cargo.toml is not modified; the
+    cargo-promote package version remains 0.2.0.
+  completed: '2026-09-06'
+  extra: []
+
+- id: task-state
+  doob_uuid: null
+  name: task-state
+  priority: P1
+  status: open
+  title: Godmode task graph (13 done, 1 pending)
+  description: |-
+    Task state read from .ctx/GODMODE.tasks.yaml and `godmode task list`:
+    - t1 Add PipelineRunner trait: done
+    - t2 Add Notifier trait and adapters: done
+    - t3 Consolidate LocalGit: done
+    - t4 Extract shell calls from BranchPipeline::bump: done
+    - t5 Rewrite Api with trait objects: done
+    - t6 Update main.rs wiring: done
+    - t7 Add conformance tests for new traits: done
+    - t8 Skip-if-already-published guard in run_stage (#6): done
+    - t9 Per-package config overrides in promote.toml (#7): done
+    - t10 Forge trait for Gitea/GitHub integration (#8): done
+    - t11 Implement branch promotion pipeline: pending
+    - t12 Skip-if-already-published - close GitHub issue #6: done
+    - t13 Per-package config - close GitHub issue #7: done
+    - t14 Forge trait - close GitHub issue #8: done
+
+    t11 is the only runnable pending task. A doob todo query scoped to
+    cargo-promote returned zero records; no task statuses were changed.
+  files:
+  - .ctx/GODMODE.tasks.yaml
+  completed: null
   extra: []
 
 - id: recent-work-context
@@ -82,21 +104,14 @@ items:
   name: recent-work-context
   priority: P2
   status: open
-  title: Recent work summary
+  title: Current repository context
   description: |-
-    Latest commit: d98ca64 feat: add Nushell completion generation
+    HEAD is 35c0485 on develop. Local branch metadata reports develop is
+    one commit ahead of local origin/develop; no remote fetch was performed.
 
-    The crate is on the `develop` branch and tracking `origin/develop`.
-
-    Main branch is ahead of github/main by 2 commits — this suggests
-    pending PR or local feature work not yet pushed to GitHub.
-
-    Modified files are a mix of domain code, test regressions, and
-    config/build artifacts. No apparent blockers.
-
-    Architecture is stable (hexagonal/ports-and-adapters pattern).
-    Primary operations: crate publishing to cratebox registry and
-    promotion to crates.io.
+    The working diff updates repository guidance and adds lockfile entries
+    for the Nushell completion dependencies already declared in Cargo.toml.
+    An untracked draft plan proposes workspace support for branch pipelines.
   completed: null
   extra: []
 
@@ -106,3 +121,8 @@ log:
   commits:
   - d98ca64 feat: add Nushell completion generation
   tests_run: 104 passed, 0 failed
+- date: '20260906'
+  summary: "handoff refreshed; task graph done=13 pending=1; dirty=3 modified, 6 untracked"
+  commits: []
+  commit_count_since_last_handoff: 0
+  tests_run: not run

@@ -1,3 +1,5 @@
+//! Core promotion models, errors, workflows, and adapter ports.
+
 pub mod deferral;
 pub mod depgraph;
 pub mod local_manifest;
@@ -34,6 +36,7 @@ pub struct Registry {
 
 // qual:allow reason: "builder pattern replaces repeated struct literals across config"
 impl Registry {
+    /// Creates a registry whose Cargo name matches its display name.
     pub fn new(name: impl Into<String>) -> Self {
         let name = name.into();
         Self {
@@ -44,16 +47,19 @@ impl Registry {
         }
     }
 
+    /// Sets the HTTP API URL used to query this registry.
     pub fn with_api_url(mut self, url: impl Into<String>) -> Self {
         self.api_url = Some(url.into());
         self
     }
 
+    /// Requires confirmation before publishing to this registry.
     pub fn with_confirm(mut self) -> Self {
         self.confirm = true;
         self
     }
 
+    /// Marks this as Cargo's default registry rather than a named registry.
     pub fn without_cargo_name(mut self) -> Self {
         self.cargo_name = None;
         self

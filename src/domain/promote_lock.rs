@@ -1,3 +1,5 @@
+//! Persists and verifies source hashes that guard in-progress promotions.
+
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

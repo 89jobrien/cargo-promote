@@ -1,3 +1,5 @@
+//! Queries Gitea Cargo packages with registry-specific authentication.
+
 pub mod forge;
 
 use std::sync::Arc;
@@ -14,6 +16,7 @@ pub struct GiteaRegistry {
 }
 
 impl GiteaRegistry {
+    /// Creates a registry query adapter with the given token resolver.
     pub fn new(token_resolver: Arc<dyn TokenResolver>) -> Self {
         Self { token_resolver }
     }

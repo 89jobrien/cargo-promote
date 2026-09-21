@@ -1,3 +1,5 @@
+//! Concrete adapters for the domain's publishing, storage, Git, and notification ports.
+
 pub mod cargo;
 pub mod deferral;
 pub mod git;

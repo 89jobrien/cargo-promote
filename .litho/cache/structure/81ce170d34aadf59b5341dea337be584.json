@@ -1,0 +1,436 @@
+{
+  "data": {
+    "project_name": "cargo-promote",
+    "root_path": ".",
+    "directories": [
+      {
+        "path": "./docs",
+        "name": "docs",
+        "file_count": 0,
+        "subdirectory_count": 1,
+        "total_size": 0,
+        "importance_score": 0.0
+      },
+      {
+        "path": "./docs/plans",
+        "name": "plans",
+        "file_count": 0,
+        "subdirectory_count": 0,
+        "total_size": 0,
+        "importance_score": 0.0
+      },
+      {
+        "path": "./src",
+        "name": "src",
+        "file_count": 3,
+        "subdirectory_count": 3,
+        "total_size": 40191,
+        "importance_score": 0.5
+      },
+      {
+        "path": "./src/config",
+        "name": "config",
+        "file_count": 1,
+        "subdirectory_count": 0,
+        "total_size": 17820,
+        "importance_score": 0.0
+      },
+      {
+        "path": "./src/domain",
+        "name": "domain",
+        "file_count": 5,
+        "subdirectory_count": 4,
+        "total_size": 30677,
+        "importance_score": 0.4
+      },
+      {
+        "path": "./src/domain/depgraph",
+        "name": "depgraph",
+        "file_count": 1,
+        "subdirectory_count": 0,
+        "total_size": 7782,
+        "importance_score": 0.0
+      },
+      {
+        "path": "./src/domain/manifest",
+        "name": "manifest",
+        "file_count": 1,
+        "subdirectory_count": 0,
+        "total_size": 3954,
+        "importance_score": 0.0
+      },
+      {
+        "path": "./src/domain/pipeline",
+        "name": "pipeline",
+        "file_count": 1,
+        "subdirectory_count": 0,
+        "total_size": 21736,
+        "importance_score": 0.0
+      },
+      {
+        "path": "./src/domain/traits",
+        "name": "traits",
+        "file_count": 1,
+        "subdirectory_count": 0,
+        "total_size": 7595,
+        "importance_score": 0.0
+      },
+      {
+        "path": "./src/infra",
+        "name": "infra",
+        "file_count": 6,
+        "subdirectory_count": 2,
+        "total_size": 27760,
+        "importance_score": 0.2
+      },
+      {
+        "path": "./src/infra/cargo",
+        "name": "cargo",
+        "file_count": 1,
+        "subdirectory_count": 0,
+        "total_size": 1836,
+        "importance_score": 0.0
+      },
+      {
+        "path": "./src/infra/git",
+        "name": "git",
+        "file_count": 1,
+        "subdirectory_count": 3,
+        "total_size": 46,
+        "importance_score": 0.1
+      },
+      {
+        "path": "./src/infra/git/gitea",
+        "name": "gitea",
+        "file_count": 2,
+        "subdirectory_count": 0,
+        "total_size": 8257,
+        "importance_score": 0.0
+      },
+      {
+        "path": "./src/infra/git/github",
+        "name": "github",
+        "file_count": 1,
+        "subdirectory_count": 0,
+        "total_size": 1926,
+        "importance_score": 0.0
+      },
+      {
+        "path": "./src/infra/git/local",
+        "name": "local",
+        "file_count": 1,
+        "subdirectory_count": 0,
+        "total_size": 6720,
+        "importance_score": 0.0
+      }
+    ],
+    "files": [
+      {
+        "path": "src/main.rs",
+        "name": "main.rs",
+        "size": 9454,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.7,
+        "complexity_score": 0.0,
+        "last_modified": "1781082815"
+      },
+      {
+        "path": "src/domain/pipeline/mod.rs",
+        "name": "mod.rs",
+        "size": 21736,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.7,
+        "complexity_score": 0.0,
+        "last_modified": "1781082815"
+      },
+      {
+        "path": "src/domain/promote_lock.rs",
+        "name": "promote_lock.rs",
+        "size": 8329,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.7,
+        "complexity_score": 0.0,
+        "last_modified": "1781082815"
+      },
+      {
+        "path": "src/domain/traits/mod.rs",
+        "name": "mod.rs",
+        "size": 7595,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.7,
+        "complexity_score": 0.0,
+        "last_modified": "1781082815"
+      },
+      {
+        "path": "src/domain/version.rs",
+        "name": "version.rs",
+        "size": 7146,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.7,
+        "complexity_score": 0.0,
+        "last_modified": "1781073290"
+      },
+      {
+        "path": "src/domain/manifest/mod.rs",
+        "name": "mod.rs",
+        "size": 3954,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.7,
+        "complexity_score": 0.0,
+        "last_modified": "1780951989"
+      },
+      {
+        "path": "src/domain/deferral.rs",
+        "name": "deferral.rs",
+        "size": 4836,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.7,
+        "complexity_score": 0.0,
+        "last_modified": "1780553646"
+      },
+      {
+        "path": "src/domain/local_manifest.rs",
+        "name": "local_manifest.rs",
+        "size": 6872,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.7,
+        "complexity_score": 0.0,
+        "last_modified": "1780764936"
+      },
+      {
+        "path": "src/domain/depgraph/mod.rs",
+        "name": "mod.rs",
+        "size": 7782,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.7,
+        "complexity_score": 0.0,
+        "last_modified": "1781082815"
+      },
+      {
+        "path": "src/domain/mod.rs",
+        "name": "mod.rs",
+        "size": 3494,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.7,
+        "complexity_score": 0.0,
+        "last_modified": "1781073281"
+      },
+      {
+        "path": "src/config/mod.rs",
+        "name": "mod.rs",
+        "size": 17820,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.65,
+        "complexity_score": 0.0,
+        "last_modified": "1781082815"
+      },
+      {
+        "path": "src/infra/notify.rs",
+        "name": "notify.rs",
+        "size": 2098,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.55,
+        "complexity_score": 0.0,
+        "last_modified": "1780289365"
+      },
+      {
+        "path": "src/infra/token.rs",
+        "name": "token.rs",
+        "size": 7570,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.55,
+        "complexity_score": 0.0,
+        "last_modified": "1781082998"
+      },
+      {
+        "path": "src/infra/cargo/mod.rs",
+        "name": "mod.rs",
+        "size": 1836,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.55,
+        "complexity_score": 0.0,
+        "last_modified": "1781082815"
+      },
+      {
+        "path": "src/infra/rail.rs",
+        "name": "rail.rs",
+        "size": 1693,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.55,
+        "complexity_score": 0.0,
+        "last_modified": "1781082815"
+      },
+      {
+        "path": "src/infra/deferral.rs",
+        "name": "deferral.rs",
+        "size": 9334,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.55,
+        "complexity_score": 0.0,
+        "last_modified": "1781082815"
+      },
+      {
+        "path": "src/infra/registry_cache.rs",
+        "name": "registry_cache.rs",
+        "size": 6950,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.55,
+        "complexity_score": 0.0,
+        "last_modified": "1781073104"
+      },
+      {
+        "path": "src/infra/git/local/mod.rs",
+        "name": "mod.rs",
+        "size": 6720,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.55,
+        "complexity_score": 0.0,
+        "last_modified": "1781082815"
+      },
+      {
+        "path": "src/infra/git/gitea/forge.rs",
+        "name": "forge.rs",
+        "size": 3928,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.55,
+        "complexity_score": 0.0,
+        "last_modified": "1780764945"
+      },
+      {
+        "path": "src/infra/git/gitea/mod.rs",
+        "name": "mod.rs",
+        "size": 4329,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.55,
+        "complexity_score": 0.0,
+        "last_modified": "1781082815"
+      },
+      {
+        "path": "src/infra/git/github/mod.rs",
+        "name": "mod.rs",
+        "size": 1926,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.55,
+        "complexity_score": 0.0,
+        "last_modified": "1780256009"
+      },
+      {
+        "path": "src/lib.rs",
+        "name": "lib.rs",
+        "size": 25266,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.55,
+        "complexity_score": 0.0,
+        "last_modified": "1781082815"
+      },
+      {
+        "path": "src/cli.rs",
+        "name": "cli.rs",
+        "size": 5471,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.55,
+        "complexity_score": 0.0,
+        "last_modified": "1781072171"
+      },
+      {
+        "path": "src/infra/mod.rs",
+        "name": "mod.rs",
+        "size": 115,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.4,
+        "complexity_score": 0.0,
+        "last_modified": "1781071995"
+      },
+      {
+        "path": "src/infra/git/mod.rs",
+        "name": "mod.rs",
+        "size": 46,
+        "extension": "rs",
+        "is_core": false,
+        "importance_score": 0.4,
+        "complexity_score": 0.0,
+        "last_modified": "1780253472"
+      },
+      {
+        "path": "rustqual.toml",
+        "name": "rustqual.toml",
+        "size": 3432,
+        "extension": "toml",
+        "is_core": false,
+        "importance_score": 0.25,
+        "complexity_score": 0.0,
+        "last_modified": "1780368058"
+      },
+      {
+        "path": "Cargo.toml",
+        "name": "Cargo.toml",
+        "size": 769,
+        "extension": "toml",
+        "is_core": false,
+        "importance_score": 0.1,
+        "complexity_score": 0.0,
+        "last_modified": "1780312056"
+      },
+      {
+        "path": "promote.toml",
+        "name": "promote.toml",
+        "size": 573,
+        "extension": "toml",
+        "is_core": false,
+        "importance_score": 0.1,
+        "complexity_score": 0.0,
+        "last_modified": "1780311173"
+      },
+      {
+        "path": "promote.lock",
+        "name": "promote.lock",
+        "size": 154,
+        "extension": "lock",
+        "is_core": false,
+        "importance_score": 0.05,
+        "complexity_score": 0.0,
+        "last_modified": "1780312056"
+      }
+    ],
+    "total_files": 29,
+    "total_directories": 15,
+    "file_types": {
+      "toml": 3,
+      "lock": 1,
+      "rs": 25
+    },
+    "size_distribution": {
+      "tiny": 5,
+      "small": 21,
+      "medium": 3
+    }
+  },
+  "timestamp": 1784744636,
+  "prompt_hash": "81ce170d34aadf59b5341dea337be584",
+  "token_usage": null,
+  "model_name": null
+}

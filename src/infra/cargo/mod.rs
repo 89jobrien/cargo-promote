@@ -1,3 +1,5 @@
+//! `cargo publish` adapter for registry pipeline stages.
+
 use crate::domain::traits::Publisher;
 use crate::domain::{CrateRef, PromoteError, PublishOpts, Registry};
 use std::process::Command;

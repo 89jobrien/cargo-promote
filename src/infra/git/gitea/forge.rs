@@ -1,3 +1,5 @@
+//! Gitea REST adapter for releases and pull requests.
+
 use secrecy::{ExposeSecret, SecretString};
 
 use crate::domain::PromoteError;
@@ -12,6 +14,7 @@ pub struct GiteaForge {
 }
 
 impl GiteaForge {
+    /// Creates an adapter for one authenticated Gitea repository.
     pub fn new(base_url: String, owner: String, repo: String, token: SecretString) -> Self {
         Self {
             base_url,

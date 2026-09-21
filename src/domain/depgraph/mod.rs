@@ -1,3 +1,5 @@
+//! Discovers workspace crates and orders them for dependency-safe publishing.
+
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 

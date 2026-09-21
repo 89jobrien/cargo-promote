@@ -1,3 +1,5 @@
+//! In-memory caching for registry crate listings.
+
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -15,6 +17,7 @@ pub struct CachingRegistryQuery<Q> {
 }
 
 impl<Q: RegistryQuery> CachingRegistryQuery<Q> {
+    /// Wraps a registry query with a per-registry listing cache.
     pub fn new(inner: Q) -> Self {
         Self {
             inner,

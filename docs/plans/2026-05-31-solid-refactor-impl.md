@@ -130,7 +130,7 @@ via trait objects on `Api`, consolidate `LocalGit`, add domain-level
 
 4. Verify:
 
-   ```
+   ```text
    cargo nextest run    -> all green
    cargo clippy -- -D warnings  -> zero warnings
    ```
@@ -254,7 +254,7 @@ via trait objects on `Api`, consolidate `LocalGit`, add domain-level
 
 5. Verify:
 
-   ```
+   ```text
    cargo nextest run    -> all green
    cargo clippy -- -D warnings  -> zero warnings
    ```
@@ -487,7 +487,7 @@ via trait objects on `Api`, consolidate `LocalGit`, add domain-level
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run    -> all green
    cargo clippy -- -D warnings  -> zero warnings
    ```
@@ -590,7 +590,7 @@ via trait objects on `Api`, consolidate `LocalGit`, add domain-level
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run    -> all green
    cargo clippy -- -D warnings  -> zero warnings
    ```
@@ -889,7 +889,7 @@ via trait objects on `Api`, consolidate `LocalGit`, add domain-level
 
 7. Verify:
 
-   ```
+   ```text
    cargo nextest run    -> all green
    cargo clippy -- -D warnings  -> zero warnings
    ```
@@ -989,7 +989,7 @@ via trait objects on `Api`, consolidate `LocalGit`, add domain-level
 
 4. Verify:
 
-   ```
+   ```text
    cargo nextest run    -> all green
    cargo clippy -- -D warnings  -> zero warnings
    ```
@@ -1253,7 +1253,7 @@ via trait objects on `Api`, consolidate `LocalGit`, add domain-level
 
 4. Verify:
 
-   ```
+   ```text
    cargo nextest run    -> all green
    cargo clippy -- -D warnings  -> zero warnings
    ```

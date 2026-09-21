@@ -1,3 +1,5 @@
+//! Dispatches `cargo-promote` subcommands to the library API.
+
 mod cli;
 
 use anyhow::{Context, Result};

@@ -1,3 +1,5 @@
+//! Orchestrates registry publishing and branch-based promotion pipelines.
+
 use super::traits::{
     CiBranchPromoter, FfStatus, GitCommitter, PipelineRunner, Publisher, RailBumper, RegistryQuery,
 };
@@ -11,6 +13,7 @@ pub struct PipelineEngine<P: Publisher, Q: RegistryQuery> {
 }
 
 impl<P: Publisher> PipelineEngine<P, NullRegistryQuery> {
+    /// Creates an engine without remote registry existence checks.
     pub fn new(publisher: P, confirmer: impl Fn(&str) -> bool + 'static) -> Self {
         Self {
             publisher,

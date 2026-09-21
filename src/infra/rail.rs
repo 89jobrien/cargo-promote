@@ -1,3 +1,5 @@
+//! `cargo rail` adapter for patch-version bumps.
+
 use crate::domain::PromoteError;
 use crate::domain::traits::RailBumper;
 use std::path::{Path, PathBuf};
@@ -9,6 +11,7 @@ pub struct ProcessRailBumper {
 }
 
 impl ProcessRailBumper {
+    /// Creates a bumper rooted at the target repository.
     pub fn new(repo_root: PathBuf) -> Self {
         Self { repo_root }
     }

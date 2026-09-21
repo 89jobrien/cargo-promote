@@ -1,3 +1,5 @@
+//! Loads promotion pipelines and registry settings from project and Cargo config files.
+
 use crate::domain::version::BumpLevel;
 use crate::domain::{PackageOverride, Pipeline, Registry, Stage};
 use anyhow::{Context, Result};

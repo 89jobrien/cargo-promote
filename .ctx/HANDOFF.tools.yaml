@@ -1,0 +1,113 @@
+generated: 2026-06-10
+since_days: 30
+sessions_scanned: 17
+total_commands: 719
+top_supported:
+  - command: ls
+    count: 12
+    rule: no-ls-use-glob
+    est_savings_tokens: 434
+  - command: grep
+    count: 7
+    rule: no-grep-use-tool
+    est_savings_tokens: 63
+  - command: cd /Users/joe/dev/naptrace
+    count: 6
+    rule: no-cd-use-absolute-paths
+    est_savings_tokens: 3092
+  - command: find /Users/joe/dev/cargo-promote/src
+    count: 2
+    rule: no-find-use-glob
+    rtk_equivalent: rtk find
+    est_savings_tokens: 1866
+    est_savings_pct: 70
+  - command: ls /Users/joe/dev/naptrace/prompts/
+    count: 2
+    rule: no-ls-use-glob
+    est_savings_tokens: 38
+  - command: find /Users/joe/.claude/plugins/cache/bazaar/godmode/d1e76d8/skills
+    count: 1
+    rule: no-find-use-glob
+    est_savings_tokens: 9
+  - command: ls /Users/joe/.local/
+    count: 1
+    rule: no-ls-use-glob
+    est_savings_tokens: 5
+  - command: ls .ctx/
+    count: 1
+    rule: no-ls-use-glob
+    est_savings_tokens: 29
+  - command: sed
+    count: 1
+    rule: no-sed-use-edit
+    est_savings_tokens: 9
+  - command: ls /Users/joe/dev/cargo-promote/.ctx/
+    count: 1
+    rule: no-ls-use-glob
+    est_savings_tokens: 9
+  - command: ls /Users/joe/dev/cargo-promote/.claude/skills
+    count: 1
+    rule: no-ls-use-glob
+    est_savings_tokens: 22
+  - command: ls /Users/joe/dev/cargo-promote/docs/plans/
+    count: 1
+    rule: no-ls-use-glob
+    est_savings_tokens: 9
+  - command: ls /Users/joe/dev/cargo-promote/.ctx/reflect-2026-06-01.md
+    count: 1
+    rule: no-ls-use-glob
+    est_savings_tokens: 13
+  - command: ls .github/workflows/
+    count: 1
+    rule: no-ls-use-glob
+    est_savings_tokens: 9
+  - command: grep '^version'
+    count: 1
+    rule: no-grep-use-tool
+    est_savings_tokens: 9
+top_unhandled:
+  - base_command: cargo test
+    count: 70
+    example: "cargo test 2>&1 | grep -E 'test result|running'"
+  - base_command: git add
+    count: 44
+    example: "git add README.md && git commit -m \"docs: add README\""
+  - base_command: cargo check
+    count: 35
+    example: "cargo check 2>&1"
+  - base_command: git log
+    count: 32
+    example: "git log --oneline | wc -l"
+  - base_command: rustqual /Users/joe/dev/cargo-promote
+    count: 31
+    example: "rustqual /Users/joe/dev/cargo-promote 2>&1"
+  - base_command: gh issue
+    count: 29
+    example: "gh issue create \\\n  --repo 89jobrien/cargo-promote \\\n  --title \"feat: Forge trai..."
+  - base_command: git
+    count: 28
+    example: "git -C /Users/joe/dev/sparkfile branch -a && echo \"---\" && git -C /Users/joe/dev..."
+  - base_command: godmode task
+    count: 26
+    example: "godmode task list 2>&1"
+  - base_command: rustqual .
+    count: 21
+    example: "rustqual . --json 2>/dev/null | python3 -c \"\nimport sys, json\nd = json.load(sys...."
+  - base_command: git branch
+    count: 17
+    example: "git branch --show-current && git log --oneline -5"
+  - base_command: git diff
+    count: 16
+    example: "git diff --name-only $(git log --format=\"%H\" --since=\"2026-05-31\" | tail -1)..HE..."
+  - base_command: git checkout
+    count: 15
+    example: "git checkout main && git merge --no-ff worktree-agent-af72c3b3 -m \"merge: issue ..."
+  - base_command: cargo clippy
+    count: 15
+    example: "cargo clippy --workspace -- -D warnings 2>&1"
+  - base_command: git status
+    count: 13
+    example: "git status --short"
+  - base_command: cargo fmt
+    count: 11
+    example: "cargo fmt --all && git add src/domain/version.rs && git commit -m \"$(cat <<'EOF'..."

@@ -1,3 +1,5 @@
+//! Formatting-preserving access to package and workspace manifest fields.
+
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 

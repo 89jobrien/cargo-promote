@@ -1,3 +1,5 @@
+//! TOML-backed filesystem storage for deferral tickets.
+
 use anyhow::Context;
 use std::fs;
 use std::path::PathBuf;
@@ -15,6 +17,7 @@ pub struct FsDeferralStore {
 }
 
 impl FsDeferralStore {
+    /// Creates a store rooted at the target repository.
     pub fn new(repo_root: PathBuf) -> Self {
         Self { repo_root }
     }

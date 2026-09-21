@@ -1,3 +1,5 @@
+//! Resolves Cargo registry tokens from the environment and credentials file.
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -27,6 +29,7 @@ impl Default for CargoTokenResolver {
 }
 
 impl CargoTokenResolver {
+    /// Creates a resolver using the current Cargo credentials path and environment.
     pub fn new() -> Self {
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
         Self {

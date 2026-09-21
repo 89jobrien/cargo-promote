@@ -1,3 +1,5 @@
+//! Resolves crate identities and versions from package or workspace manifests.
+
 use super::CrateRef;
 use super::local_manifest::LocalManifest;
 use anyhow::Result;

@@ -5,6 +5,21 @@ and optionally promote them to crates.io.
 
 ## Architecture
 
+Module structure (`src/`):
+
+- **`cli.rs`** — clap `Cli`/`Cmd` definitions, one variant per subcommand
+- **`config/`** — loads `promote.toml` (and friends) into typed config
+- **`domain/`** — core logic: pipeline stages (`domain/pipeline`), dependency
+  graph (`domain/depgraph`), manifests (`domain/manifest`,
+  `local_manifest.rs`), version handling (`version.rs`), deferrals
+  (`deferral.rs`), lockfile model (`promote_lock.rs`), and port traits
+  (`domain/traits`)
+- **`infra/`** — adapters implementing the domain traits: `cargo/` (cargo
+  invocation), `git/` (branch/merge ops), `registry_cache.rs`, `token.rs`
+  (credential resolution), `notify.rs`, `rail.rs`, `deferral.rs`
+
+Runtime registry topology (what the tool talks to):
+
 - **Registry**: Gitea 1.25 cargo packages API at
   `http://100.105.75.7:3000/api/packages/joe/cargo/` (Tailscale)
 - **Public endpoint**: `https://jobrien-vm.taila01bd5.ts.net/`
@@ -33,6 +48,13 @@ cargo-promote deferrals            # list all deferrals
 cargo-promote deferrals --pending  # list pending only
 ```
 
+### Common flags
+
+- `--pipeline <name>` — select a named pipeline (publish, promote, ship)
+- `--allow-dirty` — allow publish/ship with an uncommitted worktree
+- `--registry <name>` — override target registry (publish, list, ship)
+- `-y`, `--yes` — skip confirmation prompt (promote, ship)
+
 ## Build & Test
 
 ```bash
@@ -52,6 +74,12 @@ mise run registry:ui               # open Gitea packages in browser
 
 ## Config files
 
+- `litho.toml` — repo root: documentation/lint config (litho)
+- `rustqual.toml` — repo root: rustqual quality-gate config and suppressions
+- `promote.toml` — repo root: pipeline/stage definitions consumed by
+  `domain::pipeline` and `config/`
+- `promote.lock` — repo root: generated lockfile recording the last
+  bump/promotion state (written by `cargo-promote bump`)
 - `~/.cargo/config.toml` — registry definition
 - `~/.cargo/credentials.toml` — Bearer token for publish
 - `~/.config/mise/config.toml` — env vars and tasks
@@ -64,13 +92,13 @@ mise run registry:ui               # open Gitea packages in browser
 
 <!-- godmode-workflow:begin -->
 
-# Phased workflow
+## Phased workflow
 
 Unless the user clearly opts out (e.g. **"skip plan, just fix it"**), every
 non-trivial task progresses through five phases. Short confirmations like
 **"do it"**, **"act"**, **"go"** advance to the next phase.
 
-## Phases
+### Phases
 
 <godmode-phase name="ORIENT" mode="read-only" response-header="# Phase: ORIENT" skills="godmode handon">
 Default phase. Read files, search code, run `godmode handon`, check task
@@ -106,7 +134,7 @@ Only entered with explicit user approval. After shipping, return to
 ORIENT for the next task.
 </godmode-phase>
 
-## Phase transitions
+### Phase transitions
 
 - **User can skip phases**: "skip plan, implement now" jumps to ACT.
   "just fix it" implies ORIENT → ACT → VERIFY → SHIP in one pass.
@@ -116,29 +144,30 @@ ORIENT for the next task.
 - When the user gives a lettered choice or short confirmation, advance
   to the most obvious next phase without asking.
 
-## Skill invocation rule
+### Skill invocation rule
 
 Before responding in any phase, check if a godmode skill applies.
 1% chance it’s relevant = invoke it. Process skills (`brainstorm`,
 `systematic-debugging`) before implementation skills
 (`task-driven-development`, `parallel-agents`).
 
-## Task graph
+### Task graph
 
 Tasks live in `.ctx/GODMODE.tasks.yaml`. Use `godmode task` CLI for
 state transitions. Independent chains can run in parallel via
 `godmode:parallel-agents`. A task is runnable when all `depends_on`
 items are `done`.
 
-## Memory bank
+### Memory bank
 
 Persistent context lives in `.ctx/memory-bank/`. Read before
 substantive work; update `activeContext` and `progress` after
-milestones. See `AGENTS.md` for the full file list.
+milestones.
 
-## Agent-specific guidance
+### Agent-specific guidance
 
-For subagent conventions, Codex integration, and memory-bank file
-inventory, see `AGENTS.md`.
+This file (`CLAUDE.md`) is the canonical source of agent guidance for
+this repo. `AGENTS.md` is a pointer to this file, kept for tools that
+only look for `AGENTS.md`.
 
 <!-- godmode-workflow:end -->
